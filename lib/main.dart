@@ -136,12 +136,13 @@ class _TimetablePageState extends State<TimetablePage> {
   }
 
   Future<void> _loadCache() async {
+    // 🛠️ FIX: Updated to your collection names matching the bus_ prefix
     const collections = [
-      'districts',
-      'taluks',
-      'cities',
-      'stations',
-      'timetables',
+      'bus_districts',
+      'bus_taluks',
+      'bus_cities',
+      'bus_stations',
+      'bus_timetables',
       'bus_trips',
     ];
 
@@ -169,19 +170,22 @@ class _TimetablePageState extends State<TimetablePage> {
     });
 
     try {
-      const collections = ['districts', 'taluks', 'cities', 'stations'];
+      // 🛠️ FIX: Appending bus_ prefix to all core collections
+      const collections = ['bus_districts', 'bus_taluks', 'bus_cities', 'bus_stations'];
 
       for (final collection in collections) {
         final fetched = await pb.collection(collection).getFullList(sort: 'name');
         await cache.replaceCollection(collection, fetched);
       }
 
-      final timetables = await pb.collection('timetables').getFullList(
+      // 🛠️ FIX: Querying 'bus_timetables' collection
+      final timetables = await pb.collection('bus_timetables').getFullList(
             filter: 'status = "published"',
             sort: '-version',
           );
-      await cache.replaceCollection('timetables', timetables);
+      await cache.replaceCollection('bus_timetables', timetables);
 
+      // 🛠️ FIX: Querying 'bus_trips' collection
       final trips = await pb.collection('bus_trips').getFullList(
             filter: 'timetable.status = "published"',
             sort: 'serial_no',
@@ -190,10 +194,11 @@ class _TimetablePageState extends State<TimetablePage> {
 
       await _loadCache();
       if (mounted) setState(() => syncMessage = 'Timetables synced');
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() => syncMessage = 'Offline: showing saved timetables');
       }
+      print("Sync error details: $e");
     } finally {
       if (mounted) setState(() => syncing = false);
     }
@@ -202,7 +207,6 @@ class _TimetablePageState extends State<TimetablePage> {
   List<Map<String, dynamic>> _records(String collection) =>
       records[collection] ?? const [];
 
-  // Helper method to safely extract relation ID from structural maps or raw text lines
   String _getRelationId(dynamic fieldValue) {
     if (fieldValue == null) return '';
     if (fieldValue is String) return fieldValue;
@@ -210,22 +214,23 @@ class _TimetablePageState extends State<TimetablePage> {
     return fieldValue.toString();
   }
 
-  List<Map<String, dynamic>> get districts => _records('districts');
+  // 🛠️ FIX: Directing getters to read from the updated bus_ prefixes
+  List<Map<String, dynamic>> get districts => _records('bus_districts');
 
-  List<Map<String, dynamic>> get taluks => _records('taluks')
+  List<Map<String, dynamic>> get taluks => _records('bus_taluks')
       .where((record) => _getRelationId(record['district']) == districtId)
       .toList();
 
-  List<Map<String, dynamic>> get cities => _records('cities')
+  List<Map<String, dynamic>> get cities => _records('bus_cities')
       .where((record) => _getRelationId(record['taluk']) == talukId)
       .toList();
 
-  List<Map<String, dynamic>> get stations => _records('stations')
+  List<Map<String, dynamic>> get stations => _records('bus_stations')
       .where((record) => _getRelationId(record['city']) == cityId)
       .toList();
 
   Map<String, dynamic>? get selectedTimetable {
-    final matches = _records('timetables')
+    final matches = _records('bus_timetables')
         .where((record) => _getRelationId(record['station']) == stationId)
         .toList()
       ..sort((a, b) {
@@ -260,7 +265,6 @@ class _TimetablePageState extends State<TimetablePage> {
     required List<Map<String, dynamic>> options,
     required ValueChanged<String?> onChanged,
   }) {
-    // Prevent dropdown error by checking if current selectedId exists within options collection
     final isValidSelection = options.any((opt) => opt['id'] == selectedId);
     
     return Padding(
@@ -297,7 +301,7 @@ class _TimetablePageState extends State<TimetablePage> {
     }
 
     try {
-      final record = RecordModel(data: timetable);
+      final record = RecordModel(timetable);
       final url = pb.files.getURL(record, filename);
       final response = await http.get(url);
 
@@ -340,11 +344,11 @@ class _TimetablePageState extends State<TimetablePage> {
       appBar: AppBar(
         title: const Text('Bus Timetable'),
         actions: [
-          if (timetable != null)
-            Builder(
-              builder: (buttonContext) => IconButton(
-                tooltip: 'Share original PDF',
-                icon: const Icon(Icons.share),
+if (timetable != null)
+Builder(
+builder: (buttonContext) => IconButton(
+tooltip: 'Share original PDF',
+icon: const Icon(Icons.share),
 onPressed: () => _shareOriginalPdf(buttonContext, timetable),
 ),
 ),
