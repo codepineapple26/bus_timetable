@@ -17,8 +17,16 @@ jobs:
           channel: stable
           cache: true
 
-      - run: flutter pub get
-      - run: flutter build apk --debug --dart-define=PB_URL=${{ vars.PB_URL }}
+      - name: Regenerate Android project
+        run: |
+          rm -rf android
+          flutter create --platforms=android --org com.example --project-name bus_timetable .
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --debug
 
       - uses: actions/upload-artifact@v4
         with:
