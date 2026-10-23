@@ -295,7 +295,7 @@ class _TimetablePageState extends State<TimetablePage> {
 
     try {
       // Download the PDF only when the user taps Share.
-      final record = RecordModel(data: timetable);
+      final record = RecordModel(timetable);
       final url = pb.files.getURL(record, filename);
       final response = await http.get(url);
 
