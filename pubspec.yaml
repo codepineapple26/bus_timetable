@@ -1,12 +1,24 @@
-      - name: Get dependencies
-        run: flutter pub get
-        working-directory: bus_timetable
+name: bus_timetable
+description: Offline-first bus timetable app.
+publish_to: 'none'
+version: 1.0.0+1
 
-      - name: Build APK
-        run: flutter build apk --debug --dart-define=PB_URL=${{ vars.PB_URL }}
-        working-directory: bus_timetable
+environment:
+  sdk: '>=3.10.0 <4.0.0'
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bus-timetable-debug-apk
-          path: bus_timetable/build/app/outputs/flutter-apk/app-debug.apk
+dependencies:
+  flutter:
+    sdk: flutter
+  pocketbase: ^0.25.2
+  sqflite: ^2.4.5
+  path_provider: ^2.1.6
+  http: ^1.6.0
+  path: ^1.9.1
+  share_plus: ^13.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
