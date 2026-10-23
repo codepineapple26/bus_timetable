@@ -110,8 +110,12 @@ class TimetablePage extends StatefulWidget {
 
 class _TimetablePageState extends State<TimetablePage> {
   final LocalCache cache = LocalCache();
+  final TextEditingController _tripSearchController =
+      TextEditingController();
 
   final Map<String, List<Map<String, dynamic>>> records = {};
+
+  String _tripSearch = '';
 
   String? districtId;
   String? talukId;
@@ -141,6 +145,17 @@ class _TimetablePageState extends State<TimetablePage> {
   void initState() {
     super.initState();
     _start();
+  }
+
+  @override
+  void dispose() {
+    _tripSearchController.dispose();
+    super.dispose();
+  }
+
+  void _clearTripSearch() {
+    _tripSearchController.clear();
+    _tripSearch = '';
   }
 
   Future<void> _start() async {
@@ -186,8 +201,6 @@ class _TimetablePageState extends State<TimetablePage> {
     });
 
     try {
-      // Fetch without server-side sort/filter so this also works when a
-      // collection's schema doesn't include the optional sort/filter field.
       for (final collection in _locationCollections) {
         final fetched = await pb.collection(collection).getFullList();
         await cache.replaceCollection(collection, fetched);
@@ -252,7 +265,6 @@ class _TimetablePageState extends State<TimetablePage> {
     Map<String, dynamic> record,
     String fieldName,
   ) {
-    // Supports either "district" or "district_id" style field names.
     return _getRelationId(
       record[fieldName] ?? record['${fieldName}_id'],
     );
@@ -281,8 +293,6 @@ class _TimetablePageState extends State<TimetablePage> {
 
   bool _isPublished(Map<String, dynamic> record) {
     final status = record['status']?.toString().toLowerCase().trim() ?? '';
-    // If the collection has a status field, only show published records.
-    // If there is no status field, allow the record to be shown.
     return status.isEmpty || status == 'published';
   }
 
@@ -320,6 +330,34 @@ class _TimetablePageState extends State<TimetablePage> {
         final bNo = (b['serial_no'] as num?)?.toInt() ?? 0;
         return aNo.compareTo(bNo);
       });
+  }
+
+  List<Map<String, dynamic>> get filteredTrips {
+    final query = _tripSearch.trim().toLowerCase();
+    final allTrips = trips;
+
+    if (query.isEmpty) return allTrips;
+
+    return allTrips.where((trip) {
+      final destination =
+          (trip['to_place'] ?? '').toString().toLowerCase();
+
+      final dynamic viaValue = trip['via_places'];
+      final List<String> viaPlaces;
+
+      if (viaValue is List) {
+        viaPlaces = viaValue.map((place) => place.toString()).toList();
+      } else {
+        viaPlaces = (viaValue ?? '')
+            .toString()
+            .split(RegExp(r'[,;]'));
+      }
+
+      return destination.contains(query) ||
+          viaPlaces.any(
+            (place) => place.trim().toLowerCase().contains(query),
+          );
+    }).toList();
   }
 
   String _name(Map<String, dynamic> record) {
@@ -445,6 +483,7 @@ class _TimetablePageState extends State<TimetablePage> {
             options: districts,
             onChanged: (value) {
               setState(() {
+                _clearTripSearch();
                 districtId = value;
                 talukId = null;
                 cityId = null;
@@ -458,6 +497,7 @@ class _TimetablePageState extends State<TimetablePage> {
             options: taluks,
             onChanged: (value) {
               setState(() {
+                _clearTripSearch();
                 talukId = value;
                 cityId = null;
                 stationId = null;
@@ -470,6 +510,7 @@ class _TimetablePageState extends State<TimetablePage> {
             options: cities,
             onChanged: (value) {
               setState(() {
+                _clearTripSearch();
                 cityId = value;
                 stationId = null;
               });
@@ -481,6 +522,7 @@ class _TimetablePageState extends State<TimetablePage> {
             options: stations,
             onChanged: (value) {
               setState(() {
+                _clearTripSearch();
                 stationId = value;
               });
             },
@@ -490,36 +532,63 @@ class _TimetablePageState extends State<TimetablePage> {
             const Text('Select a station to view its timetable.')
           else if (timetable == null)
             const Text('No published timetable is available for this station.')
-          else if (trips.isEmpty)
-            const Text('No trips are saved for this timetable.')
           else ...[
             Text(
               'Departure timetable · Version ${timetable['version'] ?? ''}',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            ...trips.map((trip) {
-              final time = trip['departure_time']?.toString() ?? '';
-              final type = trip['type_raw']?.toString() ?? '';
-              final via = trip['via_places']?.toString() ?? '';
+            TextField(
+              controller: _tripSearchController,
+              decoration: InputDecoration(
+                labelText: 'Search destination or via place',
+                hintText: 'For example: Chikkamagalur or Magadi',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _tripSearch.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear search',
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          setState(_clearTripSearch);
+                        },
+                      ),
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _tripSearch = value;
+                });
+              },
+            ),
+            const SizedBox(height: 8),
+            if (trips.isEmpty)
+              const Text('No trips are saved for this timetable.')
+            else if (filteredTrips.isEmpty)
+              const Text('No trips match your search.')
+            else
+              ...filteredTrips.map((trip) {
+                final time = trip['departure_time']?.toString() ?? '';
+                final type = trip['type_raw']?.toString() ?? '';
+                final via = trip['via_places']?.toString() ?? '';
 
-              return Card(
-                child: ListTile(
-                  leading: Text(
-                    time,
-                    style: Theme.of(context).textTheme.titleMedium,
+                return Card(
+                  child: ListTile(
+                    leading: Text(
+                      time,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    title: Text(
+                      '${trip['from_place'] ?? ''} → ${trip['to_place'] ?? ''}',
+                    ),
+                    subtitle: Text([
+                      if (type.isNotEmpty) type,
+                      if (via.isNotEmpty) 'Via: $via',
+                    ].join(' · ')),
+                    trailing: Text('${trip['serial_no'] ?? ''}'),
                   ),
-                  title: Text(
-                    '${trip['from_place'] ?? ''} → ${trip['to_place'] ?? ''}',
-                  ),
-                  subtitle: Text([
-                    if (type.isNotEmpty) type,
-                    if (via.isNotEmpty) 'Via: $via',
-                  ].join(' · ')),
-                  trailing: Text('${trip['serial_no'] ?? ''}'),
-                ),
-              );
-            }),
+                );
+              }),
           ],
         ],
       ),
