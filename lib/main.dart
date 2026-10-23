@@ -583,7 +583,7 @@ class _TimetablePageState extends State<TimetablePage> {
                       if (type.isNotEmpty) type,
                       if (via.isNotEmpty) 'Via: $via',
                     ].join(' · ')),
-                  #  trailing: Text('${trip['serial_no'] ?? ''}'),
+                  //  trailing: Text('${trip['serial_no'] ?? ''}'), show serial no
                   ),
                 );
               }),
