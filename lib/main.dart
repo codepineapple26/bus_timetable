@@ -9,13 +9,13 @@ import 'package:pocketbase/pocketbase.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sqflite/sqflite.dart';
 
-const pbUrl = String.fromEnvironment(
+//const pbUrl = String.fromEnvironment(
   'PB_URL',
   // Android emulator only. Use your server URL or computer's LAN IP
   // when running on a physical device.
-  defaultValue: 'http://10.0.2.2:8090',
-);
-
+//  defaultValue: 'http://10.0.2.2:8090',
+//);
+const pbUrl = '10.253.154.218:8090';
 final pb = PocketBase(pbUrl);
 
 void main() {
