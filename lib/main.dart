@@ -497,126 +497,151 @@ class _TimetablePageState extends State<TimetablePage> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+    body: ListView(
+  padding: const EdgeInsets.all(16),
+  children: [
+    Text(syncMessage),
+    const SizedBox(height: 16),
+
+    SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
         children: [
-          Text(syncMessage),
-          const SizedBox(height: 16),
-          _selector(
-            label: 'District',
-            selectedId: districtId,
-            options: districts,
-            onChanged: (value) {
-              setState(() {
-                _clearTripSearch();
-                districtId = value;
-                talukId = null;
-                cityId = null;
-                stationId = null;
-              });
-            },
-          ),
-          _selector(
-            label: 'Taluk',
-            selectedId: talukId,
-            options: taluks,
-            onChanged: (value) {
-              setState(() {
-                _clearTripSearch();
-                talukId = value;
-                cityId = null;
-                stationId = null;
-              });
-            },
-          ),
-          _selector(
-            label: 'City / Town',
-            selectedId: cityId,
-            options: cities,
-            onChanged: (value) {
-              setState(() {
-                _clearTripSearch();
-                cityId = value;
-                stationId = null;
-              });
-            },
-          ),
-          _selector(
-            label: 'Bus Station',
-            selectedId: stationId,
-            options: stations,
-            onChanged: (value) {
-              setState(() {
-                _clearTripSearch();
-                stationId = value;
-              });
-            },
-          ),
-          const SizedBox(height: 8),
-          if (stationId == null)
-            const Text('Select a station to view its timetable.')
-          else if (timetable == null)
-            const Text('No published timetable is available for this station.')
-          else ...[
-            Text(
-              'Departure timetable · Version ${timetable['version'] ?? ''}',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _tripSearchController,
-              decoration: InputDecoration(
-                labelText: 'Search destination or via place',
-                hintText: 'For example: Chikkamagalur or Magadi',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _tripSearch.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Clear search',
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          setState(_clearTripSearch);
-                        },
-                      ),
-                border: const OutlineInputBorder(),
-              ),
+          SizedBox(
+            width: 150,
+            child: _selector(
+              label: 'Dist',
+              selectedId: districtId,
+              options: districts,
               onChanged: (value) {
                 setState(() {
-                  _tripSearch = value;
+                  _clearTripSearch();
+                  districtId = value;
+                  talukId = null;
+                  cityId = null;
+                  stationId = null;
                 });
               },
             ),
-            const SizedBox(height: 8),
-            if (trips.isEmpty)
-              const Text('No trips are saved for this timetable.')
-            else if (filteredTrips.isEmpty)
-              const Text('No trips match your search.')
-            else
-              ...filteredTrips.map((trip) {
-                final time = trip['departure_time']?.toString() ?? '';
-                final type = trip['type_raw']?.toString() ?? '';
-                final via = trip['via_places']?.toString() ?? '';
-
-                return Card(
-                  child: ListTile(
-                    leading: Text(
-                      time,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    title: Text(
-                      '${trip['from_place'] ?? ''} → ${trip['to_place'] ?? ''}',
-                    ),
-                    subtitle: Text([
-                      if (type.isNotEmpty) type,
-                      if (via.isNotEmpty) 'Via: $via',
-                    ].join(' · ')),
-                  //  trailing: Text('${trip['serial_no'] ?? ''}'), show serial no
-                  ),
-                );
-              }),
-          ],
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 150,
+            child: _selector(
+              label: 'Taluk',
+              selectedId: talukId,
+              options: taluks,
+              onChanged: (value) {
+                setState(() {
+                  _clearTripSearch();
+                  talukId = value;
+                  cityId = null;
+                  stationId = null;
+                });
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 150,
+            child: _selector(
+              label: 'City',
+              selectedId: cityId,
+              options: cities,
+              onChanged: (value) {
+                setState(() {
+                  _clearTripSearch();
+                  cityId = value;
+                  stationId = null;
+                });
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 150,
+            child: _selector(
+              label: 'Station',
+              selectedId: stationId,
+              options: stations,
+              onChanged: (value) {
+                setState(() {
+                  _clearTripSearch();
+                  stationId = value;
+                });
+              },
+            ),
+          ),
         ],
       ),
+    ),
+
+    const SizedBox(height: 16),
+
+    if (stationId == null)
+      const Text('Select a station to view its timetable.')
+    else if (timetable == null)
+      const Text('No published timetable is available for this station.')
+    else ...[
+      Text(
+        'Departure timetable · Version ${timetable['version'] ?? ''}',
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+      const SizedBox(height: 8),
+      TextField(
+        controller: _tripSearchController,
+        decoration: InputDecoration(
+          labelText: 'Search Destination or via Place',
+          hintText: 'For example: Chikkamagalur or Magadi',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _tripSearch.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Clear search',
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    setState(_clearTripSearch);
+                  },
+                ),
+          border: const OutlineInputBorder(),
+        ),
+        onChanged: (value) {
+          setState(() {
+            _tripSearch = value;
+          });
+        },
+      ),
+      const SizedBox(height: 8),
+      if (trips.isEmpty)
+        const Text('No trips are saved for this timetable.')
+      else if (filteredTrips.isEmpty)
+        const Text('No trips match your search.')
+      else
+        ...filteredTrips.map((trip) {
+          final time = trip['departure_time']?.toString() ?? '';
+          final type = trip['type_raw']?.toString() ?? '';
+          final via = trip['via_places']?.toString() ?? '';
+
+          return Card(
+            child: ListTile(
+              leading: Text(
+                time,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              title: Text(
+                '${trip['from_place'] ?? ''} → ${trip['to_place'] ?? ''}',
+              ),
+              subtitle: Text([
+                if (type.isNotEmpty) type,
+                if (via.isNotEmpty) 'Via: $via',
+              ].join(' · ')),
+            ),
+          );
+        }),
+    ],
+  ],
+),
+
     );
   }
 }
