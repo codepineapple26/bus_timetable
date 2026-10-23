@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -38,6 +39,7 @@ class LocalCache {
 
   Future<void> init() async {
     final directory = await getDatabasesPath();
+
     db = await openDatabase(
       p.join(directory, 'bus_timetable.db'),
       version: 1,
@@ -77,6 +79,7 @@ class LocalCache {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
+
       await batch.commit(noResult: true);
     });
   }
@@ -109,6 +112,7 @@ class _TimetablePageState extends State<TimetablePage> {
   final LocalCache cache = LocalCache();
 
   final Map<String, List<Map<String, dynamic>>> records = {};
+
   String? districtId;
   String? talukId;
   String? cityId;
@@ -116,6 +120,22 @@ class _TimetablePageState extends State<TimetablePage> {
 
   bool syncing = false;
   String syncMessage = 'Loading saved timetables…';
+
+  static const _locationCollections = [
+    'bus_districts',
+    'bus_taluks',
+    'bus_cities',
+    'bus_stations',
+  ];
+
+  static const _allCollections = [
+    'bus_districts',
+    'bus_taluks',
+    'bus_cities',
+    'bus_stations',
+    'bus_timetables',
+    'bus_trips',
+  ];
 
   @override
   void initState() {
@@ -129,28 +149,22 @@ class _TimetablePageState extends State<TimetablePage> {
       await _loadCache();
       await _sync();
     } catch (e) {
+      debugPrint('App initialization failed: $e');
       if (mounted) {
-        setState(() => syncMessage = 'Could not open local cache: $e');
+        setState(() {
+          syncMessage = 'Could not open local cache: $e';
+        });
       }
     }
   }
 
   Future<void> _loadCache() async {
-    // 🛠️ FIX: Updated to your collection names matching the bus_ prefix
-    const collections = [
-      'bus_districts',
-      'bus_taluks',
-      'bus_cities',
-      'bus_stations',
-      'bus_timetables',
-      'bus_trips',
-    ];
-
-    for (final collection in collections) {
+    for (final collection in _allCollections) {
       records[collection] = await cache.getRecords(collection);
     }
 
     if (!mounted) return;
+
     setState(() {
       if (!_containsId(districts, districtId)) districtId = null;
       if (!_containsId(taluks, talukId)) talukId = null;
@@ -159,79 +173,126 @@ class _TimetablePageState extends State<TimetablePage> {
     });
   }
 
-  bool _containsId(List<Map<String, dynamic>> list, String? id) =>
-      id != null && list.any((item) => item['id'] == id);
+  bool _containsId(List<Map<String, dynamic>> list, String? id) {
+    return id != null && list.any((item) => item['id']?.toString() == id);
+  }
 
   Future<void> _sync() async {
-    if (syncing) return;
+    if (syncing || !mounted) return;
+
     setState(() {
       syncing = true;
-      syncMessage = 'Syncing published timetables…';
+      syncMessage = 'Syncing timetables…';
     });
 
     try {
-      // 🛠️ FIX: Appending bus_ prefix to all core collections
-      const collections = ['bus_districts', 'bus_taluks', 'bus_cities', 'bus_stations'];
-
-      for (final collection in collections) {
-        final fetched = await pb.collection(collection).getFullList(sort: 'name');
+      // Fetch without server-side sort/filter so this also works when a
+      // collection's schema doesn't include the optional sort/filter field.
+      for (final collection in _locationCollections) {
+        final fetched = await pb.collection(collection).getFullList();
         await cache.replaceCollection(collection, fetched);
       }
 
-      // 🛠️ FIX: Querying 'bus_timetables' collection
-      final timetables = await pb.collection('bus_timetables').getFullList(
-            filter: 'status = "published"',
-            sort: '-version',
-          );
+      final timetables =
+          await pb.collection('bus_timetables').getFullList();
       await cache.replaceCollection('bus_timetables', timetables);
 
-      // 🛠️ FIX: Querying 'bus_trips' collection
-      final trips = await pb.collection('bus_trips').getFullList(
-            filter: 'timetable.status = "published"',
-            sort: 'serial_no',
-          );
+      final trips = await pb.collection('bus_trips').getFullList();
       await cache.replaceCollection('bus_trips', trips);
 
       await _loadCache();
-      if (mounted) setState(() => syncMessage = 'Timetables synced');
-    } catch (e) {
+
       if (mounted) {
-        setState(() => syncMessage = 'Offline: showing saved timetables');
+        setState(() {
+          syncMessage = 'Timetables synced';
+        });
       }
-      print("Sync error details: $e");
+    } catch (e, stackTrace) {
+      debugPrint('PocketBase sync failed: $e');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (mounted) {
+        setState(() {
+          syncMessage = 'Sync failed: $e. Showing saved data if available.';
+        });
+      }
     } finally {
-      if (mounted) setState(() => syncing = false);
+      if (mounted) {
+        setState(() {
+          syncing = false;
+        });
+      }
     }
   }
 
-  List<Map<String, dynamic>> _records(String collection) =>
-      records[collection] ?? const [];
+  List<Map<String, dynamic>> _records(String collection) {
+    return records[collection] ?? const [];
+  }
 
   String _getRelationId(dynamic fieldValue) {
     if (fieldValue == null) return '';
-    if (fieldValue is String) return fieldValue;
-    if (fieldValue is List && fieldValue.isNotEmpty) return fieldValue.first.toString();
-    return fieldValue.toString();
+
+    if (fieldValue is String || fieldValue is num) {
+      return fieldValue.toString();
+    }
+
+    if (fieldValue is Map) {
+      final id = fieldValue['id'];
+      return id?.toString() ?? '';
+    }
+
+    if (fieldValue is List && fieldValue.isNotEmpty) {
+      return _getRelationId(fieldValue.first);
+    }
+
+    return '';
   }
 
-  // 🛠️ FIX: Directing getters to read from the updated bus_ prefixes
+  String _recordRelationId(
+    Map<String, dynamic> record,
+    String fieldName,
+  ) {
+    // Supports either "district" or "district_id" style field names.
+    return _getRelationId(
+      record[fieldName] ?? record['${fieldName}_id'],
+    );
+  }
+
   List<Map<String, dynamic>> get districts => _records('bus_districts');
 
   List<Map<String, dynamic>> get taluks => _records('bus_taluks')
-      .where((record) => _getRelationId(record['district']) == districtId)
+      .where(
+        (record) =>
+            _recordRelationId(record, 'district') == districtId,
+      )
       .toList();
 
   List<Map<String, dynamic>> get cities => _records('bus_cities')
-      .where((record) => _getRelationId(record['taluk']) == talukId)
+      .where(
+        (record) => _recordRelationId(record, 'taluk') == talukId,
+      )
       .toList();
 
   List<Map<String, dynamic>> get stations => _records('bus_stations')
-      .where((record) => _getRelationId(record['city']) == cityId)
+      .where(
+        (record) => _recordRelationId(record, 'city') == cityId,
+      )
       .toList();
+
+  bool _isPublished(Map<String, dynamic> record) {
+    final status = record['status']?.toString().toLowerCase().trim() ?? '';
+    // If the collection has a status field, only show published records.
+    // If there is no status field, allow the record to be shown.
+    return status.isEmpty || status == 'published';
+  }
 
   Map<String, dynamic>? get selectedTimetable {
     final matches = _records('bus_timetables')
-        .where((record) => _getRelationId(record['station']) == stationId)
+        .where(
+          (record) =>
+              _isPublished(record) &&
+              _recordRelationId(record, 'station') == stationId,
+        )
         .toList()
       ..sort((a, b) {
         final aVersion = (a['version'] as num?)?.toInt() ?? 0;
@@ -246,8 +307,13 @@ class _TimetablePageState extends State<TimetablePage> {
     final timetable = selectedTimetable;
     if (timetable == null) return [];
 
+    final timetableId = timetable['id']?.toString() ?? '';
+
     return _records('bus_trips')
-        .where((record) => _getRelationId(record['timetable']) == timetable['id'])
+        .where(
+          (record) =>
+              _recordRelationId(record, 'timetable') == timetableId,
+        )
         .toList()
       ..sort((a, b) {
         final aNo = (a['serial_no'] as num?)?.toInt() ?? 0;
@@ -256,8 +322,12 @@ class _TimetablePageState extends State<TimetablePage> {
       });
   }
 
-  String _name(Map<String, dynamic> record) =>
-      record['name']?.toString() ?? 'Unnamed';
+  String _name(Map<String, dynamic> record) {
+    return record['name']?.toString() ??
+        record['title']?.toString() ??
+        record['station_name']?.toString() ??
+        'Unnamed';
+  }
 
   Widget _selector({
     required String label,
@@ -265,8 +335,10 @@ class _TimetablePageState extends State<TimetablePage> {
     required List<Map<String, dynamic>> options,
     required ValueChanged<String?> onChanged,
   }) {
-    final isValidSelection = options.any((opt) => opt['id'] == selectedId);
-    
+    final isValidSelection = options.any(
+      (option) => option['id']?.toString() == selectedId,
+    );
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: DropdownButtonFormField<String>(
@@ -275,14 +347,15 @@ class _TimetablePageState extends State<TimetablePage> {
           labelText: label,
           border: const OutlineInputBorder(),
         ),
-        items: options
-            .map(
-              (record) => DropdownMenuItem<String>(
-                value: record['id'] as String,
-                child: Text(_name(record)),
-              ),
-            )
-            .toList(),
+        items: options.map((record) {
+          final id = record['id']?.toString();
+          if (id == null) return null;
+
+          return DropdownMenuItem<String>(
+            value: id,
+            child: Text(_name(record)),
+          );
+        }).whereType<DropdownMenuItem<String>>().toList(),
         onChanged: onChanged,
       ),
     );
@@ -293,6 +366,7 @@ class _TimetablePageState extends State<TimetablePage> {
     Map<String, dynamic> timetable,
   ) async {
     final filename = timetable['source_pdf']?.toString() ?? '';
+
     if (filename.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No original PDF is attached.')),
@@ -316,9 +390,8 @@ class _TimetablePageState extends State<TimetablePage> {
 
       final renderObject = buttonContext.findRenderObject();
       final box = renderObject is RenderBox ? renderObject : null;
-      final origin = box == null
-          ? null
-          : box.localToGlobal(Offset.zero) & box.size;
+      final origin =
+          box == null ? null : box.localToGlobal(Offset.zero) & box.size;
 
       await SharePlus.instance.share(
         ShareParams(
@@ -328,6 +401,7 @@ class _TimetablePageState extends State<TimetablePage> {
         ),
       );
     } catch (e) {
+      debugPrint('Could not share timetable PDF: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not share PDF: $e')),
@@ -344,99 +418,111 @@ class _TimetablePageState extends State<TimetablePage> {
       appBar: AppBar(
         title: const Text('Bus Timetable'),
         actions: [
-if (timetable != null)
-Builder(
-builder: (buttonContext) => IconButton(
-tooltip: 'Share original PDF',
-icon: const Icon(Icons.share),
-onPressed: () => _shareOriginalPdf(buttonContext, timetable),
-),
-),
-IconButton(
-tooltip: 'Sync',
-onPressed: syncing ? null : _sync,
-icon: const Icon(Icons.sync),
-),
-],
-),
-body: ListView(
-padding: const EdgeInsets.all(16),
-children: [
-Text(syncMessage),
-const SizedBox(height: 16),
-_selector(
-label: 'District',
-selectedId: districtId,
-options: districts,
-onChanged: (value) => setState(() {
-districtId = value;
-talukId = null;
-cityId = null;
-stationId = null;
-}),
-),
-_selector(
-label: 'Taluk',
-selectedId: talukId,
-options: taluks,
-onChanged: (value) => setState(() {
-talukId = value;
-cityId = null;
-stationId = null;
-}),
-),
-_selector(
-label: 'City / Town',
-selectedId: cityId,
-options: cities,
-onChanged: (value) => setState(() {
-cityId = value;
-stationId = null;
-}),
-),
-_selector(
-label: 'Bus Station',
-selectedId: stationId,
-options: stations,
-onChanged: (value) => setState(() => stationId = value),
-),
-const SizedBox(height: 8),
-if (stationId == null)
-const Text('Select a station to view its timetable.')
-else if (timetable == null)
-const Text('No published timetable is available for this station.')
-else if (trips.isEmpty)
-const Text('No trips are saved for this timetable.')
-else ...[
-Text(
-'Departure timetable · Version ${timetable['version'] ?? ''}',
-style: Theme.of(context).textTheme.titleMedium,
-),
-const SizedBox(height: 8),
-...trips.map((trip) {
-final time = trip['departure_time']?.toString() ?? '';
-final type = trip['type_raw']?.toString() ?? '';
-final via = trip['via_places']?.toString() ?? '';
-return Card(
-child: ListTile(
-leading: Text(
-time,
-style: Theme.of(context).textTheme.titleMedium,
-),
-title: Text(
-'${trip['from_place'] ?? ''} → ${trip['to_place'] ?? ''}',
-),
-subtitle: Text([
-if (type.isNotEmpty) type,
-if (via.isNotEmpty) 'Via: $via',
-].join(' · ')),
-trailing: Text('${trip['serial_no'] ?? ''}'),
-),
-);
-}),
-],
-],
-),
-);
-}
+          if (timetable != null)
+            Builder(
+              builder: (buttonContext) => IconButton(
+                tooltip: 'Share original PDF',
+                icon: const Icon(Icons.share),
+                onPressed: () =>
+                    _shareOriginalPdf(buttonContext, timetable),
+              ),
+            ),
+          IconButton(
+            tooltip: 'Sync',
+            onPressed: syncing ? null : _sync,
+            icon: const Icon(Icons.sync),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(syncMessage),
+          const SizedBox(height: 16),
+          _selector(
+            label: 'District',
+            selectedId: districtId,
+            options: districts,
+            onChanged: (value) {
+              setState(() {
+                districtId = value;
+                talukId = null;
+                cityId = null;
+                stationId = null;
+              });
+            },
+          ),
+          _selector(
+            label: 'Taluk',
+            selectedId: talukId,
+            options: taluks,
+            onChanged: (value) {
+              setState(() {
+                talukId = value;
+                cityId = null;
+                stationId = null;
+              });
+            },
+          ),
+          _selector(
+            label: 'City / Town',
+            selectedId: cityId,
+            options: cities,
+            onChanged: (value) {
+              setState(() {
+                cityId = value;
+                stationId = null;
+              });
+            },
+          ),
+          _selector(
+            label: 'Bus Station',
+            selectedId: stationId,
+            options: stations,
+            onChanged: (value) {
+              setState(() {
+                stationId = value;
+              });
+            },
+          ),
+          const SizedBox(height: 8),
+          if (stationId == null)
+            const Text('Select a station to view its timetable.')
+          else if (timetable == null)
+            const Text('No published timetable is available for this station.')
+          else if (trips.isEmpty)
+            const Text('No trips are saved for this timetable.')
+          else ...[
+            Text(
+              'Departure timetable · Version ${timetable['version'] ?? ''}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            ...trips.map((trip) {
+              final time = trip['departure_time']?.toString() ?? '';
+              final type = trip['type_raw']?.toString() ?? '';
+              final via = trip['via_places']?.toString() ?? '';
+
+              return Card(
+                child: ListTile(
+                  leading: Text(
+                    time,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  title: Text(
+                    '${trip['from_place'] ?? ''} → ${trip['to_place'] ?? ''}',
+                  ),
+                  subtitle: Text([
+                    if (type.isNotEmpty) type,
+                    if (via.isNotEmpty) 'Via: $via',
+                  ].join(' · ')),
+                  trailing: Text('${trip['serial_no'] ?? ''}'),
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
 }
