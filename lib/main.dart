@@ -15,7 +15,7 @@ import 'package:sqflite/sqflite.dart';
   // when running on a physical device.
 //  defaultValue: 'http://10.0.2.2:8090',
 //);
-const pbUrl = '10.253.154.218:8090';
+const pbUrl = 'http://10.253.154.218:8090';
 final pb = PocketBase(pbUrl);
 
 void main() {
