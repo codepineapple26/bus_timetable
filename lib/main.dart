@@ -314,23 +314,21 @@ class _TimetablePageState extends State<TimetablePage> {
   }
 
   List<Map<String, dynamic>> get trips {
-    final timetable = selectedTimetable;
-    if (timetable == null) return [];
+  final timetable = selectedTimetable;
+  if (timetable == null) return [];
 
-    final timetableId = timetable['id']?.toString() ?? '';
+  final timetableId = timetable['id']?.toString() ?? '';
 
-    return _records('bus_trips')
-        .where(
-          (record) =>
-              _recordRelationId(record, 'timetable') == timetableId,
-        )
-        .toList()
-      ..sort((a, b) {
-        final aNo = (a['serial_no'] as num?)?.toInt() ?? 0;
-        final bNo = (b['serial_no'] as num?)?.toInt() ?? 0;
-        return aNo.compareTo(bNo);
-      });
-  }
+  return _records('bus_trips')
+      .where(
+        (record) =>
+            _recordRelationId(record, 'timetable') == timetableId,
+      )
+      .toList()
+    ..sort((a, b) => _departureMinutes(a['departure_time'])
+        .compareTo(_departureMinutes(b['departure_time'])));
+}
+
 
   List<Map<String, dynamic>> get filteredTrips {
     final query = _tripSearch.trim().toLowerCase();
@@ -585,7 +583,7 @@ class _TimetablePageState extends State<TimetablePage> {
                       if (type.isNotEmpty) type,
                       if (via.isNotEmpty) 'Via: $via',
                     ].join(' · ')),
-                    trailing: Text('${trip['serial_no'] ?? ''}'),
+                  #  trailing: Text('${trip['serial_no'] ?? ''}'),
                   ),
                 );
               }),
