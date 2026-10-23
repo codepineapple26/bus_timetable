@@ -296,6 +296,33 @@ class _TimetablePageState extends State<TimetablePage> {
     return status.isEmpty || status == 'published';
   }
 
+  int _departureMinutes(dynamic value) {
+  final time = (value ?? '').toString().trim().toUpperCase();
+  final match = RegExp(
+    r'^(\d{1,2}):?(\d{2})\s*(AM|PM)?$',
+  ).firstMatch(time);
+
+  if (match == null) return 1 << 30; // Invalid or empty times sort last.
+
+  var hour = int.parse(match.group(1)!);
+  final minute = int.parse(match.group(2)!);
+  final meridiem = match.group(3);
+
+  if (minute > 59) return 1 << 30;
+
+  if (meridiem != null) {
+    if (hour < 1 || hour > 12) return 1 << 30;
+    if (meridiem == 'PM' && hour < 12) hour += 12;
+    if (meridiem == 'AM' && hour == 12) hour = 0;
+  } else if (hour > 23) {
+    return 1 << 30;
+  }
+
+  return hour * 60 + minute;
+}
+
+
+  
   Map<String, dynamic>? get selectedTimetable {
     final matches = _records('bus_timetables')
         .where(
