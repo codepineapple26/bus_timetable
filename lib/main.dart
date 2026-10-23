@@ -9,12 +9,6 @@ import 'package:pocketbase/pocketbase.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sqflite/sqflite.dart';
 
-//const pbUrl = String.fromEnvironment(
- // 'PB_URL',
-  // Android emulator only. Use your server URL or computer's LAN IP
-  // when running on a physical device.
-//  defaultValue: 'http://10.0.2.2:8090',
-//);
 const pbUrl = 'http://10.253.154.218:8090';
 final pb = PocketBase(pbUrl);
 
@@ -188,8 +182,6 @@ class _TimetablePageState extends State<TimetablePage> {
           );
       await cache.replaceCollection('timetables', timetables);
 
-      // The PocketBase bus_trips read rule should also restrict results
-      // to trips whose related timetable is published.
       final trips = await pb.collection('bus_trips').getFullList(
             filter: 'timetable.status = "published"',
             sort: 'serial_no',
@@ -210,23 +202,31 @@ class _TimetablePageState extends State<TimetablePage> {
   List<Map<String, dynamic>> _records(String collection) =>
       records[collection] ?? const [];
 
+  // Helper method to safely extract relation ID from structural maps or raw text lines
+  String _getRelationId(dynamic fieldValue) {
+    if (fieldValue == null) return '';
+    if (fieldValue is String) return fieldValue;
+    if (fieldValue is List && fieldValue.isNotEmpty) return fieldValue.first.toString();
+    return fieldValue.toString();
+  }
+
   List<Map<String, dynamic>> get districts => _records('districts');
 
   List<Map<String, dynamic>> get taluks => _records('taluks')
-      .where((record) => record['district'] == districtId)
+      .where((record) => _getRelationId(record['district']) == districtId)
       .toList();
 
   List<Map<String, dynamic>> get cities => _records('cities')
-      .where((record) => record['taluk'] == talukId)
+      .where((record) => _getRelationId(record['taluk']) == talukId)
       .toList();
 
   List<Map<String, dynamic>> get stations => _records('stations')
-      .where((record) => record['city'] == cityId)
+      .where((record) => _getRelationId(record['city']) == cityId)
       .toList();
 
   Map<String, dynamic>? get selectedTimetable {
     final matches = _records('timetables')
-        .where((record) => record['station'] == stationId)
+        .where((record) => _getRelationId(record['station']) == stationId)
         .toList()
       ..sort((a, b) {
         final aVersion = (a['version'] as num?)?.toInt() ?? 0;
@@ -242,7 +242,7 @@ class _TimetablePageState extends State<TimetablePage> {
     if (timetable == null) return [];
 
     return _records('bus_trips')
-        .where((record) => record['timetable'] == timetable['id'])
+        .where((record) => _getRelationId(record['timetable']) == timetable['id'])
         .toList()
       ..sort((a, b) {
         final aNo = (a['serial_no'] as num?)?.toInt() ?? 0;
@@ -260,10 +260,13 @@ class _TimetablePageState extends State<TimetablePage> {
     required List<Map<String, dynamic>> options,
     required ValueChanged<String?> onChanged,
   }) {
+    // Prevent dropdown error by checking if current selectedId exists within options collection
+    final isValidSelection = options.any((opt) => opt['id'] == selectedId);
+    
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: DropdownButtonFormField<String>(
-        value: selectedId,
+        value: isValidSelection ? selectedId : null,
         decoration: InputDecoration(
           labelText: label,
           border: const OutlineInputBorder(),
@@ -294,8 +297,7 @@ class _TimetablePageState extends State<TimetablePage> {
     }
 
     try {
-      // Download the PDF only when the user taps Share.
-      final record = RecordModel(timetable);
+      final record = RecordModel(data: timetable);
       final url = pb.files.getURL(record, filename);
       final response = await http.get(url);
 
@@ -343,97 +345,94 @@ class _TimetablePageState extends State<TimetablePage> {
               builder: (buttonContext) => IconButton(
                 tooltip: 'Share original PDF',
                 icon: const Icon(Icons.share),
-                onPressed: () => _shareOriginalPdf(buttonContext, timetable),
-              ),
-            ),
-          IconButton(
-            tooltip: 'Sync',
-            onPressed: syncing ? null : _sync,
-            icon: const Icon(Icons.sync),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(syncMessage),
-          const SizedBox(height: 16),
-
-          _selector(
-            label: 'District',
-            selectedId: districtId,
-            options: districts,
-            onChanged: (value) => setState(() {
-              districtId = value;
-              talukId = null;
-              cityId = null;
-              stationId = null;
-            }),
-          ),
-          _selector(
-            label: 'Taluk',
-            selectedId: talukId,
-            options: taluks,
-            onChanged: (value) => setState(() {
-              talukId = value;
-              cityId = null;
-              stationId = null;
-            }),
-          ),
-          _selector(
-            label: 'City / Town',
-            selectedId: cityId,
-            options: cities,
-            onChanged: (value) => setState(() {
-              cityId = value;
-              stationId = null;
-            }),
-          ),
-          _selector(
-            label: 'Bus Station',
-            selectedId: stationId,
-            options: stations,
-            onChanged: (value) => setState(() => stationId = value),
-          ),
-
-          const SizedBox(height: 8),
-          if (stationId == null)
-            const Text('Select a station to view its timetable.')
-          else if (timetable == null)
-            const Text('No published timetable is available for this station.')
-          else if (trips.isEmpty)
-            const Text('No trips are saved for this timetable.')
-          else ...[
-            Text(
-              'Departure timetable · Version ${timetable['version'] ?? ''}',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            ...trips.map((trip) {
-              final time = trip['departure_time']?.toString() ?? '';
-              final type = trip['type_raw']?.toString() ?? '';
-              final via = trip['via_places']?.toString() ?? '';
-
-              return Card(
-                child: ListTile(
-                  leading: Text(
-                    time,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  title: Text(
-                    '${trip['from_place'] ?? ''} → ${trip['to_place'] ?? ''}',
-                  ),
-                  subtitle: Text([
-                    if (type.isNotEmpty) type,
-                    if (via.isNotEmpty) 'Via: $via',
-                  ].join(' · ')),
-                  trailing: Text('${trip['serial_no'] ?? ''}'),
-                ),
-              );
-            }),
-          ],
-        ],
-      ),
-    );
-  }
+onPressed: () => _shareOriginalPdf(buttonContext, timetable),
+),
+),
+IconButton(
+tooltip: 'Sync',
+onPressed: syncing ? null : _sync,
+icon: const Icon(Icons.sync),
+),
+],
+),
+body: ListView(
+padding: const EdgeInsets.all(16),
+children: [
+Text(syncMessage),
+const SizedBox(height: 16),
+_selector(
+label: 'District',
+selectedId: districtId,
+options: districts,
+onChanged: (value) => setState(() {
+districtId = value;
+talukId = null;
+cityId = null;
+stationId = null;
+}),
+),
+_selector(
+label: 'Taluk',
+selectedId: talukId,
+options: taluks,
+onChanged: (value) => setState(() {
+talukId = value;
+cityId = null;
+stationId = null;
+}),
+),
+_selector(
+label: 'City / Town',
+selectedId: cityId,
+options: cities,
+onChanged: (value) => setState(() {
+cityId = value;
+stationId = null;
+}),
+),
+_selector(
+label: 'Bus Station',
+selectedId: stationId,
+options: stations,
+onChanged: (value) => setState(() => stationId = value),
+),
+const SizedBox(height: 8),
+if (stationId == null)
+const Text('Select a station to view its timetable.')
+else if (timetable == null)
+const Text('No published timetable is available for this station.')
+else if (trips.isEmpty)
+const Text('No trips are saved for this timetable.')
+else ...[
+Text(
+'Departure timetable · Version ${timetable['version'] ?? ''}',
+style: Theme.of(context).textTheme.titleMedium,
+),
+const SizedBox(height: 8),
+...trips.map((trip) {
+final time = trip['departure_time']?.toString() ?? '';
+final type = trip['type_raw']?.toString() ?? '';
+final via = trip['via_places']?.toString() ?? '';
+return Card(
+child: ListTile(
+leading: Text(
+time,
+style: Theme.of(context).textTheme.titleMedium,
+),
+title: Text(
+'${trip['from_place'] ?? ''} → ${trip['to_place'] ?? ''}',
+),
+subtitle: Text([
+if (type.isNotEmpty) type,
+if (via.isNotEmpty) 'Via: $via',
+].join(' · ')),
+trailing: Text('${trip['serial_no'] ?? ''}'),
+),
+);
+}),
+],
+],
+),
+);
+}
 }
