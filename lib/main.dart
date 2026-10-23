@@ -340,6 +340,7 @@ class _TimetablePageState extends State<TimetablePage> {
     return matches.isEmpty ? null : matches.first;
   }
 
+  
   List<Map<String, dynamic>> get trips {
   final timetable = selectedTimetable;
   if (timetable == null) return [];
@@ -356,7 +357,21 @@ class _TimetablePageState extends State<TimetablePage> {
         .compareTo(_departureMinutes(b['departure_time'])));
 }
 
+  Map<String, dynamic>? get nextDeparture {
+  final now = DateTime.now();
+  final currentMinutes = now.hour * 60 + now.minute;
 
+  for (final trip in trips) {
+    final minutes = _departureMinutes(trip['departure_time']);
+    if (minutes >= currentMinutes && minutes < 24 * 60) {
+      return trip;
+    }
+  }
+
+  return null; // No more departures today.
+}
+
+  
   List<Map<String, dynamic>> get filteredTrips {
     final query = _tripSearch.trim().toLowerCase();
     final allTrips = trips;
@@ -587,6 +602,24 @@ class _TimetablePageState extends State<TimetablePage> {
         'Departure timetable · Version ${timetable['version'] ?? ''}',
         style: Theme.of(context).textTheme.titleMedium,
       ),
+
+      if (nextDeparture == null)
+  const Text('No more departures listed today.')
+else
+  Card(
+    child: ListTile(
+      leading: const Icon(Icons.directions_bus),
+      title: Text(
+        'Next departure: ${nextDeparture!['departure_time'] ?? ''}',
+      ),
+      subtitle: Text(
+        '${nextDeparture!['from_place'] ?? ''} → '
+        '${nextDeparture!['to_place'] ?? ''}',
+      ),
+    ),
+  ),
+
+
       const SizedBox(height: 8),
       TextField(
         controller: _tripSearchController,
