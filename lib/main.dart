@@ -10,7 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:sqflite/sqflite.dart';
 
 //const pbUrl = String.fromEnvironment(
-  'PB_URL',
+ // 'PB_URL',
   // Android emulator only. Use your server URL or computer's LAN IP
   // when running on a physical device.
 //  defaultValue: 'http://10.0.2.2:8090',
