@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:http/http.dart' as http;
@@ -37,6 +41,9 @@ class BusTimetableApp extends StatelessWidget {
 
 class LocalCache {
   late final Database db;
+
+  
+
 
   Future<void> init() async {
     final directory = await getDatabasesPath();
@@ -199,7 +206,26 @@ class _TimetablePageState extends State<TimetablePage> {
     return id != null && list.any((item) => item['id']?.toString() == id);
   }
 
+  Future<bool> _ensureLocalNetworkAccess() async {
+  if (!Platform.isAndroid) return true;
+
+  final android = await DeviceInfoPlugin().androidInfo;
+  if (android.version.sdkInt < 37) return true;
+
+  final status = await Permission.accessLocalNetwork.request();
+  if (status.isGranted) return true;
+
+  if (status.isPermanentlyDenied) {
+    await openAppSettings();
+  }
+  return false;
+}
   Future<void> _sync() async {
+
+    if (!await _ensureLocalNetworkAccess()) {
+    // Show an error in the UI: “Allow local network access to sync.”
+    return;
+  }
     if (syncing || !mounted) return;
 
     setState(() {
