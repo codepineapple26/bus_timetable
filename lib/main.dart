@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -68,6 +69,7 @@ class LocalCache {
       );
 
       final batch = txn.batch();
+
       for (final record in records) {
         batch.insert(
           'cached_records',
@@ -110,11 +112,10 @@ class TimetablePage extends StatefulWidget {
 
 class _TimetablePageState extends State<TimetablePage> {
   final LocalCache cache = LocalCache();
-  final TextEditingController _tripSearchController =
-      TextEditingController();
-
+  final TextEditingController _tripSearchController = TextEditingController();
   final Map<String, List<Map<String, dynamic>>> records = {};
 
+  Timer? _clockTimer;
   String _tripSearch = '';
 
   String? districtId;
@@ -144,11 +145,17 @@ class _TimetablePageState extends State<TimetablePage> {
   @override
   void initState() {
     super.initState();
+
+    _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+
     _start();
   }
 
   @override
   void dispose() {
+    _clockTimer?.cancel();
     _tripSearchController.dispose();
     super.dispose();
   }
@@ -250,8 +257,7 @@ class _TimetablePageState extends State<TimetablePage> {
     }
 
     if (fieldValue is Map) {
-      final id = fieldValue['id'];
-      return id?.toString() ?? '';
+      return fieldValue['id']?.toString() ?? '';
     }
 
     if (fieldValue is List && fieldValue.isNotEmpty) {
@@ -274,8 +280,7 @@ class _TimetablePageState extends State<TimetablePage> {
 
   List<Map<String, dynamic>> get taluks => _records('bus_taluks')
       .where(
-        (record) =>
-            _recordRelationId(record, 'district') == districtId,
+        (record) => _recordRelationId(record, 'district') == districtId,
       )
       .toList();
 
@@ -297,32 +302,29 @@ class _TimetablePageState extends State<TimetablePage> {
   }
 
   int _departureMinutes(dynamic value) {
-  final time = (value ?? '').toString().trim().toUpperCase();
-  final match = RegExp(
-    r'^(\d{1,2}):?(\d{2})\s*(AM|PM)?$',
-  ).firstMatch(time);
+    final time = (value ?? '').toString().trim().toUpperCase();
+    final match = RegExp(r'^(\d{1,2}):?(\d{2})\s*(AM|PM)?$')
+        .firstMatch(time);
 
-  if (match == null) return 1 << 30; // Invalid or empty times sort last.
+    if (match == null) return 1 << 30;
 
-  var hour = int.parse(match.group(1)!);
-  final minute = int.parse(match.group(2)!);
-  final meridiem = match.group(3);
+    var hour = int.parse(match.group(1)!);
+    final minute = int.parse(match.group(2)!);
+    final meridiem = match.group(3);
 
-  if (minute > 59) return 1 << 30;
+    if (minute > 59) return 1 << 30;
 
-  if (meridiem != null) {
-    if (hour < 1 || hour > 12) return 1 << 30;
-    if (meridiem == 'PM' && hour < 12) hour += 12;
-    if (meridiem == 'AM' && hour == 12) hour = 0;
-  } else if (hour > 23) {
-    return 1 << 30;
+    if (meridiem != null) {
+      if (hour < 1 || hour > 12) return 1 << 30;
+      if (meridiem == 'PM' && hour < 12) hour += 12;
+      if (meridiem == 'AM' && hour == 12) hour = 0;
+    } else if (hour > 23) {
+      return 1 << 30;
+    }
+
+    return hour * 60 + minute;
   }
 
-  return hour * 60 + minute;
-}
-
-
-  
   Map<String, dynamic>? get selectedTimetable {
     final matches = _records('bus_timetables')
         .where(
@@ -340,38 +342,39 @@ class _TimetablePageState extends State<TimetablePage> {
     return matches.isEmpty ? null : matches.first;
   }
 
-  
   List<Map<String, dynamic>> get trips {
-  final timetable = selectedTimetable;
-  if (timetable == null) return [];
+    final timetable = selectedTimetable;
+    if (timetable == null) return [];
 
-  final timetableId = timetable['id']?.toString() ?? '';
+    final timetableId = timetable['id']?.toString() ?? '';
 
-  return _records('bus_trips')
-      .where(
-        (record) =>
-            _recordRelationId(record, 'timetable') == timetableId,
-      )
-      .toList()
-    ..sort((a, b) => _departureMinutes(a['departure_time'])
-        .compareTo(_departureMinutes(b['departure_time'])));
-}
-
-  Map<String, dynamic>? get nextDeparture {
-  final now = DateTime.now();
-  final currentMinutes = now.hour * 60 + now.minute;
-
-  for (final trip in trips) {
-    final minutes = _departureMinutes(trip['departure_time']);
-    if (minutes >= currentMinutes && minutes < 24 * 60) {
-      return trip;
-    }
+    return _records('bus_trips')
+        .where(
+          (record) =>
+              _recordRelationId(record, 'timetable') == timetableId,
+        )
+        .toList()
+      ..sort(
+        (a, b) => _departureMinutes(a['departure_time'])
+            .compareTo(_departureMinutes(b['departure_time'])),
+      );
   }
 
-  return null; // No more departures today.
-}
+  Map<String, dynamic>? get nextDeparture {
+    final now = DateTime.now();
+    final currentMinutes = now.hour * 60 + now.minute;
 
-  
+    for (final trip in trips) {
+      final minutes = _departureMinutes(trip['departure_time']);
+
+      if (minutes >= currentMinutes && minutes < 24 * 60) {
+        return trip;
+      }
+    }
+
+    return null;
+  }
+
   List<Map<String, dynamic>> get filteredTrips {
     final query = _tripSearch.trim().toLowerCase();
     final allTrips = trips;
@@ -388,9 +391,7 @@ class _TimetablePageState extends State<TimetablePage> {
       if (viaValue is List) {
         viaPlaces = viaValue.map((place) => place.toString()).toList();
       } else {
-        viaPlaces = (viaValue ?? '')
-            .toString()
-            .split(RegExp(r'[,;]'));
+        viaPlaces = (viaValue ?? '').toString().split(RegExp(r'[,;]'));
       }
 
       return destination.contains(query) ||
@@ -420,20 +421,23 @@ class _TimetablePageState extends State<TimetablePage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: DropdownButtonFormField<String>(
-        value: isValidSelection ? selectedId : null,
+        initialValue: isValidSelection ? selectedId : null,
         decoration: InputDecoration(
           labelText: label,
           border: const OutlineInputBorder(),
         ),
-        items: options.map((record) {
-          final id = record['id']?.toString();
-          if (id == null) return null;
+        items: options
+            .map((record) {
+              final id = record['id']?.toString();
+              if (id == null) return null;
 
-          return DropdownMenuItem<String>(
-            value: id,
-            child: Text(_name(record)),
-          );
-        }).whereType<DropdownMenuItem<String>>().toList(),
+              return DropdownMenuItem<String>(
+                value: id,
+                child: Text(_name(record)),
+              );
+            })
+            .whereType<DropdownMenuItem<String>>()
+            .toList(),
         onChanged: onChanged,
       ),
     );
@@ -491,6 +495,7 @@ class _TimetablePageState extends State<TimetablePage> {
   @override
   Widget build(BuildContext context) {
     final timetable = selectedTimetable;
+    final departure = nextDeparture;
 
     return Scaffold(
       appBar: AppBar(
@@ -512,169 +517,164 @@ class _TimetablePageState extends State<TimetablePage> {
           ),
         ],
       ),
-    body: ListView(
-  padding: const EdgeInsets.all(16),
-  children: [
-    Text(syncMessage),
-    const SizedBox(height: 16),
-
-    SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
+      body: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          SizedBox(
-            width: 150,
-            child: _selector(
-              label: 'Dist',
-              selectedId: districtId,
-              options: districts,
+          Text(syncMessage),
+          const SizedBox(height: 16),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 150,
+                  child: _selector(
+                    label: 'Dist',
+                    selectedId: districtId,
+                    options: districts,
+                    onChanged: (value) {
+                      setState(() {
+                        _clearTripSearch();
+                        districtId = value;
+                        talukId = null;
+                        cityId = null;
+                        stationId = null;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 150,
+                  child: _selector(
+                    label: 'Taluk',
+                    selectedId: talukId,
+                    options: taluks,
+                    onChanged: (value) {
+                      setState(() {
+                        _clearTripSearch();
+                        talukId = value;
+                        cityId = null;
+                        stationId = null;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 150,
+                  child: _selector(
+                    label: 'City',
+                    selectedId: cityId,
+                    options: cities,
+                    onChanged: (value) {
+                      setState(() {
+                        _clearTripSearch();
+                        cityId = value;
+                        stationId = null;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 150,
+                  child: _selector(
+                    label: 'Station',
+                    selectedId: stationId,
+                    options: stations,
+                    onChanged: (value) {
+                      setState(() {
+                        _clearTripSearch();
+                        stationId = value;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (stationId == null)
+            const Text('Select a station to view its timetable.')
+          else if (timetable == null)
+            const Text('No published timetable is available for this station.')
+          else ...[
+            Text(
+              'Departure timetable · Version ${timetable['version'] ?? ''}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            if (departure == null)
+              const Text('No more departures listed today.')
+            else
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.directions_bus),
+                  title: Text(
+                    'Next departure: '
+                    '${departure['departure_time'] ?? ''}',
+                  ),
+                  subtitle: Text(
+                    '${departure['from_place'] ?? ''} → '
+                    '${departure['to_place'] ?? ''}',
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _tripSearchController,
+              decoration: InputDecoration(
+                labelText: 'Search Destination or via Place',
+                hintText: 'For example: Chikkamagalur or Magadi',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _tripSearch.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear search',
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          setState(_clearTripSearch);
+                        },
+                      ),
+                border: const OutlineInputBorder(),
+              ),
               onChanged: (value) {
                 setState(() {
-                  _clearTripSearch();
-                  districtId = value;
-                  talukId = null;
-                  cityId = null;
-                  stationId = null;
+                  _tripSearch = value;
                 });
               },
             ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 150,
-            child: _selector(
-              label: 'Taluk',
-              selectedId: talukId,
-              options: taluks,
-              onChanged: (value) {
-                setState(() {
-                  _clearTripSearch();
-                  talukId = value;
-                  cityId = null;
-                  stationId = null;
-                });
-              },
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 150,
-            child: _selector(
-              label: 'City',
-              selectedId: cityId,
-              options: cities,
-              onChanged: (value) {
-                setState(() {
-                  _clearTripSearch();
-                  cityId = value;
-                  stationId = null;
-                });
-              },
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 150,
-            child: _selector(
-              label: 'Station',
-              selectedId: stationId,
-              options: stations,
-              onChanged: (value) {
-                setState(() {
-                  _clearTripSearch();
-                  stationId = value;
-                });
-              },
-            ),
-          ),
+            const SizedBox(height: 8),
+            if (trips.isEmpty)
+              const Text('No trips are saved for this timetable.')
+            else if (filteredTrips.isEmpty)
+              const Text('No trips match your search.')
+            else
+              ...filteredTrips.map((trip) {
+                final time = trip['departure_time']?.toString() ?? '';
+                final type = trip['type_raw']?.toString() ?? '';
+                final via = trip['via_places']?.toString() ?? '';
+
+                return Card(
+                  child: ListTile(
+                    leading: Text(
+                      time,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    title: Text(
+                      '${trip['from_place'] ?? ''} → '
+                      '${trip['to_place'] ?? ''}',
+                    ),
+                    subtitle: Text([
+                      if (type.isNotEmpty) type,
+                      if (via.isNotEmpty) 'Via: $via',
+                    ].join(' · ')),
+                  ),
+                );
+              }),
+          ],
         ],
       ),
-    ),
-
-    const SizedBox(height: 16),
-
-    if (stationId == null)
-      const Text('Select a station to view its timetable.')
-    else if (timetable == null)
-      const Text('No published timetable is available for this station.')
-    else ...[
-      Text(
-        'Departure timetable · Version ${timetable['version'] ?? ''}',
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-
-      if (nextDeparture == null)
-  const Text('No more departures listed today.')
-else
-  Card(
-    child: ListTile(
-      leading: const Icon(Icons.directions_bus),
-      title: Text(
-        'Next departure: ${nextDeparture!['departure_time'] ?? ''}',
-      ),
-      subtitle: Text(
-        '${nextDeparture!['from_place'] ?? ''} → '
-        '${nextDeparture!['to_place'] ?? ''}',
-      ),
-    ),
-  ),
-
-
-      const SizedBox(height: 8),
-      TextField(
-        controller: _tripSearchController,
-        decoration: InputDecoration(
-          labelText: 'Search Destination or via Place',
-          hintText: 'For example: Chikkamagalur or Magadi',
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: _tripSearch.isEmpty
-              ? null
-              : IconButton(
-                  tooltip: 'Clear search',
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    setState(_clearTripSearch);
-                  },
-                ),
-          border: const OutlineInputBorder(),
-        ),
-        onChanged: (value) {
-          setState(() {
-            _tripSearch = value;
-          });
-        },
-      ),
-      const SizedBox(height: 8),
-      if (trips.isEmpty)
-        const Text('No trips are saved for this timetable.')
-      else if (filteredTrips.isEmpty)
-        const Text('No trips match your search.')
-      else
-        ...filteredTrips.map((trip) {
-          final time = trip['departure_time']?.toString() ?? '';
-          final type = trip['type_raw']?.toString() ?? '';
-          final via = trip['via_places']?.toString() ?? '';
-
-          return Card(
-            child: ListTile(
-              leading: Text(
-                time,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              title: Text(
-                '${trip['from_place'] ?? ''} → ${trip['to_place'] ?? ''}',
-              ),
-              subtitle: Text([
-                if (type.isNotEmpty) type,
-                if (via.isNotEmpty) 'Via: $via',
-              ].join(' · ')),
-            ),
-          );
-        }),
-    ],
-  ],
-),
-
     );
   }
 }
