@@ -18,9 +18,8 @@ jobs:
           cache: true
 
       - name: Regenerate Android project
-        run: |
-          rm -rf android
-          flutter create --platforms=android --org com.example --project-name bus_timetable .
+        run: flutter create --platforms=android --org com.example --project-name bus_timetable .
+       
 
       - name: Get dependencies
         run: flutter pub get
