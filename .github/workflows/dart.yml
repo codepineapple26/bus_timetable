@@ -17,9 +17,19 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Regenerate Android project
-        run: flutter create --platforms=android --org com.example --project-name bus_timetable .
-       
+      - name: Generate Android project
+        run: |
+          if [ ! -d android ]; then
+            flutter create --platforms=android --org com.example --project-name bus_timetable .
+          else
+            echo "Android project already exists; keeping its configuration."
+          fi
+
+      - name: Upload Android project files
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-scaffold
+          path: android/
 
       - name: Get dependencies
         run: flutter pub get
