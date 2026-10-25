@@ -49,10 +49,10 @@ class LocalCache {
 
     db = await openDatabase(
       p.join(directory, 'bus_timetable.db'),
-      version: 2,
+      version: 3,
       onCreate: (database, version) async {
         await database.execute('''
-          CREATE TABLE cached_records (
+          CREATE TABLE IF NOT EXISTS cached_records (
             collection_name TEXT NOT NULL,
             record_id TEXT NOT NULL,
             json TEXT NOT NULL,
@@ -60,97 +60,102 @@ class LocalCache {
           )
         ''');
 
-        await database.execute('''
-          CREATE TABLE IF NOT EXISTS bus_favorites (
-            schedule_id TEXT PRIMARY KEY,
-            created_at TEXT NOT NULL
-          )
-        ''');
+        await _createFavoritesTable(database);
+        await _createTravelOutboxTable(database);
       },
       onUpgrade: (database, oldVersion, newVersion) async {
         if (oldVersion < 2) {
-          await database.execute('''
-            CREATE TABLE IF NOT EXISTS bus_favorites (
-              schedule_id TEXT PRIMARY KEY,
-              created_at TEXT NOT NULL
-            )
-          ''');
+          await _createFavoritesTable(database);
+        }
+
+        if (oldVersion < 3) {
+          await _createTravelOutboxTable(database);
         }
       },
     );
   }
 
-  Future<Set<String>> getFavoriteScheduleIds() async {
-    final rows = await db.query(
-      'bus_favorites',
-      columns: ['schedule_id'],
-    );
-
-    return rows.map((row) => row['schedule_id'] as String).toSet();
+  Future<void> _createFavoritesTable(DatabaseExecutor database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS bus_favorites (
+        schedule_id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL
+      )
+    ''');
   }
 
-  Future<void> addFavorite(String scheduleId) async {
+  Future<void> _createTravelOutboxTable(DatabaseExecutor database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS bus_visits_outbox (
+        local_id TEXT PRIMARY KEY,
+        schedule_id TEXT,
+        visit_time TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        notes TEXT,
+        photo_path TEXT,
+        attachments_json TEXT,
+        sync_status TEXT NOT NULL DEFAULT 'pending',
+        pocketbase_id TEXT
+      )
+    ''');
+  }
+
+  /// Save a travel record locally first. It can be synced to PocketBase later.
+  Future<void> saveTravelVisit({
+    required String localId,
+    String? scheduleId,
+    required String visitTime,
+    required String purpose,
+    String? notes,
+    String? photoPath,
+    List<String> attachmentPaths = const [],
+  }) async {
     await db.insert(
-      'bus_favorites',
+      'bus_visits_outbox',
       {
+        'local_id': localId,
         'schedule_id': scheduleId,
-        'created_at': DateTime.now().toIso8601String(),
+        'visit_time': visitTime,
+        'purpose': purpose,
+        'notes': notes,
+        'photo_path': photoPath,
+        'attachments_json': jsonEncode(attachmentPaths),
+        'sync_status': 'pending',
       },
-      conflictAlgorithm: ConflictAlgorithm.ignore,
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  Future<void> removeFavorite(String scheduleId) async {
-    await db.delete(
-      'bus_favorites',
-      where: 'schedule_id = ?',
-      whereArgs: [scheduleId],
+  /// Includes both pending and already-synced records stored on this device.
+  Future<List<Map<String, dynamic>>> getTravelHistory() {
+    return db.query(
+      'bus_visits_outbox',
+      orderBy: 'visit_time DESC',
     );
   }
 
-  Future<void> replaceCollection(
-    String collection,
-    List<RecordModel> records,
-  ) async {
-    await db.transaction((txn) async {
-      await txn.delete(
-        'cached_records',
-        where: 'collection_name = ?',
-        whereArgs: [collection],
-      );
-
-      final batch = txn.batch();
-
-      for (final record in records) {
-        batch.insert(
-          'cached_records',
-          {
-            'collection_name': collection,
-            'record_id': record.id,
-            'json': jsonEncode(record.toJson()),
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      await batch.commit(noResult: true);
-    });
+  Future<List<Map<String, dynamic>>> getPendingTravelVisits() {
+    return db.query(
+      'bus_visits_outbox',
+      where: 'sync_status = ?',
+      whereArgs: ['pending'],
+      orderBy: 'visit_time ASC',
+    );
   }
 
-  Future<List<Map<String, dynamic>>> getRecords(String collection) async {
-    final rows = await db.query(
-      'cached_records',
-      where: 'collection_name = ?',
-      whereArgs: [collection],
+  Future<void> markTravelVisitSynced({
+    required String localId,
+    required String pocketBaseId,
+  }) async {
+    await db.update(
+      'bus_visits_outbox',
+      {
+        'sync_status': 'synced',
+        'pocketbase_id': pocketBaseId,
+      },
+      where: 'local_id = ?',
+      whereArgs: [localId],
     );
-
-    return rows
-        .map(
-          (row) => Map<String, dynamic>.from(
-            jsonDecode(row['json'] as String) as Map,
-          ),
-        )
-        .toList();
   }
 }
 
@@ -645,8 +650,33 @@ class _TimetablePageState extends State<TimetablePage> {
             onPressed: syncing ? null : _sync,
             icon: const Icon(Icons.sync),
           ),
+          
+      IconButton(
+  icon: const Icon(Icons.history),
+  tooltip: 'Travel history',
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ViewTravelHistoryPage(pb: pb),
+      ),
+    );
+  },
+)
+          IconButton(
+      tooltip: 'Favorites',
+      icon: const Icon(Icons.favorite),
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => FavoritesPage()),
+        );
+      },
+    ),
         ],
       ),
+
+
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
