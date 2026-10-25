@@ -934,11 +934,15 @@ class _TimetablePageState extends State<TimetablePage> {
       ),
     );
   }
-  Widget _buildTripCard(Map<String, dynamic> trip) {
+Widget _buildTripCard(Map<String, dynamic> trip) {
   String field(List<String> keys) {
     for (final key in keys) {
       final value = trip[key]?.toString().trim();
-      if (value != null && value.isNotEmpty) return value;
+      if (value != null &&
+          value.isNotEmpty &&
+          !RegExp(r'^[a-zA-Z0-9]{15}$').hasMatch(value)) {
+        return value;
+      }
     }
     return '';
   }
@@ -958,6 +962,66 @@ class _TimetablePageState extends State<TimetablePage> {
   final departureDateTime = DateTime.tryParse(departure);
   final isUpcoming = departureDateTime?.isAfter(DateTime.now()) ?? false;
 
+  const hiddenKeys = {
+    'id',
+    'created',
+    'updated',
+    'collectionid',
+    'collectionname',
+  };
+
+  const displayedKeys = {
+    'from_city',
+    'origin',
+    'source',
+    'from',
+    'to_city',
+    'destination',
+    'to',
+    'route_name',
+    'name',
+    'departure_time',
+    'depart_time',
+    'departure',
+    'bus_name',
+    'bus_number',
+    'bus',
+  };
+
+  final details = <String>[];
+
+  for (final entry in trip.entries) {
+    final key = entry.key;
+    final normalizedKey = key.toLowerCase().replaceAll('_', '');
+    final value = entry.value;
+
+    if (hiddenKeys.contains(normalizedKey) ||
+        normalizedKey.endsWith('id') ||
+        displayedKeys.contains(key.toLowerCase()) ||
+        value == null ||
+        value is Map) {
+      continue;
+    }
+
+    final text = value is List
+        ? value.join(', ').trim()
+        : value.toString().trim();
+
+    if (text.isEmpty ||
+        RegExp(r'^[a-zA-Z0-9]{15}$').hasMatch(text)) {
+      continue;
+    }
+
+    final label = key
+        .replaceAll('_', ' ')
+        .replaceAllMapped(
+          RegExp(r'([a-z])([A-Z])'),
+          (match) => '${match[1]} ${match[2]}',
+        );
+
+    details.add('$label: $text');
+  }
+
   return Card(
     color: departureDateTime == null
         ? null
@@ -966,10 +1030,14 @@ class _TimetablePageState extends State<TimetablePage> {
             : Colors.red.shade50,
     child: ListTile(
       title: Text(title),
-      subtitle: Text([
-        if (bus.isNotEmpty) bus,
-        if (departure.isNotEmpty) 'Departure: $departure',
-      ].join(' • ')),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (bus.isNotEmpty) Text('Bus: $bus'),
+          if (departure.isNotEmpty) Text('Departure: $departure'),
+          ...details.map(Text.new),
+        ],
+      ),
       trailing: departureDateTime == null
           ? null
           : Icon(
@@ -979,5 +1047,6 @@ class _TimetablePageState extends State<TimetablePage> {
     ),
   );
 }
+
 
 }
