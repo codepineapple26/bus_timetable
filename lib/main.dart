@@ -932,4 +932,50 @@ class _TimetablePageState extends State<TimetablePage> {
       ),
     );
   }
+  Widget _buildTripCard(Map<String, dynamic> trip) {
+  String field(List<String> keys) {
+    for (final key in keys) {
+      final value = trip[key]?.toString().trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  final from = field(['from_city', 'origin', 'source', 'from']);
+  final to = field(['to_city', 'destination', 'to']);
+  final route = field(['route_name', 'name']);
+  final departure = field(['departure_time', 'depart_time', 'departure']);
+  final bus = field(['bus_name', 'bus_number', 'bus']);
+
+  final title = from.isNotEmpty && to.isNotEmpty
+      ? '$from → $to'
+      : route.isNotEmpty
+          ? route
+          : 'Bus trip';
+
+  final departureDateTime = DateTime.tryParse(departure);
+  final isUpcoming = departureDateTime?.isAfter(DateTime.now()) ?? false;
+
+  return Card(
+    color: departureDateTime == null
+        ? null
+        : isUpcoming
+            ? Colors.green.shade50
+            : Colors.red.shade50,
+    child: ListTile(
+      title: Text(title),
+      subtitle: Text([
+        if (bus.isNotEmpty) bus,
+        if (departure.isNotEmpty) 'Departure: $departure',
+      ].join(' • ')),
+      trailing: departureDateTime == null
+          ? null
+          : Icon(
+              isUpcoming ? Icons.schedule : Icons.history,
+              color: isUpcoming ? Colors.green : Colors.red,
+            ),
+    ),
+  );
+}
+
 }
