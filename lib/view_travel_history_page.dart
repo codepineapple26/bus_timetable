@@ -174,9 +174,13 @@ class _ViewTravelHistoryPageState extends State<ViewTravelHistoryPage> {
                               context,
                               MaterialPageRoute(
                                 builder: (_) => TravelVisitDetailsPage(
-                                  visit: visit,
-                                  routeLabel: routeLabel,
-                                ),
+  visit: <String, dynamic>{
+    ...visit.data,
+    'id': visit.id,
+  },
+  routeLabel: routeLabel,
+),
+
                               ),
                             );
                           },
