@@ -763,7 +763,7 @@ class _TimetablePageState extends State<TimetablePage> {
       builder: (_) => FavoritesPage(
   loadFavoriteIds: cache.getFavoriteScheduleIds,
   loadTrips: () => cache.getRecords('bus_trips'),
-  tripBuilder: (context, trip) => _buildTripCard(context, trip),
+  tripBuilder: (context, trip) => _buildTripCard(trip),
 
 ),
     ),
