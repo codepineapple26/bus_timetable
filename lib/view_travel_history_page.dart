@@ -84,18 +84,7 @@ class _ViewTravelHistoryPageState extends State<ViewTravelHistoryPage> {
       }
     }
   }
-bool _isHiddenField(String key) {
-    final normalized = key.toLowerCase().replaceAll(RegExp(r'[_\s-]'), '');
-    return {
-      'id',
-      'created',
-      'updated',
-      'collectionid',
-      'collectionname',
-      'serialno',
-    }.contains(normalized) ||
-        normalized.endsWith('id');
-  }
+
   
   String _scheduleDescription(RecordModel visit) {
   final expandedSchedules = visit.expand['schedule'];
