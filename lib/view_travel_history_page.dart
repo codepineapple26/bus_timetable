@@ -23,7 +23,19 @@ class _ViewTravelHistoryPageState extends State<ViewTravelHistoryPage> {
   bool _hasMore = true;
   bool _loading = false;
   String? _error;
-
+ bool _isHiddenField(String key) {
+    final normalized = key.toLowerCase().replaceAll(RegExp(r'[_\s-]'), '');
+    return {
+      'id',
+      'created',
+      'updated',
+      'collectionid',
+      'collectionname',
+      'serialno',
+    }.contains(normalized) ||
+        normalized.endsWith('id');
+  }
+  
   @override
   void initState() {
     super.initState();
@@ -72,27 +84,41 @@ class _ViewTravelHistoryPageState extends State<ViewTravelHistoryPage> {
       }
     }
   }
-
-  String _scheduleDescription(RecordModel visit) {
-    final expandedSchedules = visit.expand['schedule'];
-
-    if (expandedSchedules != null && expandedSchedules.isNotEmpty) {
-      final data = expandedSchedules.first.data;
-      final entries = data.entries.where((entry) {
-        return !{'id', 'created', 'updated'}.contains(entry.key) &&
-            entry.value != null &&
-            entry.value.toString().isNotEmpty;
-      }).take(5);
-
-      final description = entries
-          .map((entry) => '${entry.key}: ${entry.value}')
-          .join(' • ');
-
-      if (description.isNotEmpty) return description;
-    }
-
-    return 'Schedule: ${visit.data['schedule'] ?? 'Unknown'}';
+bool _isHiddenField(String key) {
+    final normalized = key.toLowerCase().replaceAll(RegExp(r'[_\s-]'), '');
+    return {
+      'id',
+      'created',
+      'updated',
+      'collectionid',
+      'collectionname',
+      'serialno',
+    }.contains(normalized) ||
+        normalized.endsWith('id');
   }
+  
+  String _scheduleDescription(RecordModel visit) {
+  final expandedSchedules = visit.expand['schedule'];
+
+  if (expandedSchedules != null && expandedSchedules.isNotEmpty) {
+    final data = expandedSchedules.first.data;
+
+    final entries = data.entries.where((entry) {
+      return !_isHiddenField(entry.key) &&
+          entry.value != null &&
+          entry.value.toString().isNotEmpty;
+    }).take(5);
+
+    final description = entries
+        .map((entry) => '${entry.key}: ${entry.value}')
+        .join(' • ');
+
+    if (description.isNotEmpty) return description;
+  }
+
+  return 'Schedule';
+}
+
 
   @override
   Widget build(BuildContext context) {
