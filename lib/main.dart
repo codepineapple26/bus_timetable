@@ -12,6 +12,8 @@ import 'package:pocketbase/pocketbase.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sqflite/sqflite.dart';
+import 'favorites_page.dart';
+
 
 // Change this path to the location of your travel-record form.
 import 'add_visit_page.dart';
@@ -102,10 +104,10 @@ class LocalCache {
 
   // Favorites
 
-  Future<List<String>> getFavoriteScheduleIds() async {
-    final rows = await db.query('bus_favorites');
-    return rows.map((row) => row['schedule_id'] as String).toList();
-  }
+  Future<Set<String>> getFavoriteScheduleIds() async {
+  final rows = await db.query('bus_favorites');
+  return rows.map((row) => row['schedule_id'] as String).toSet();
+}
 
   Future<void> addFavorite(String scheduleId) async {
     await db.insert(
@@ -749,16 +751,22 @@ class _TimetablePageState extends State<TimetablePage> {
       ),
     );
   },
-)
+),
           IconButton(
       tooltip: 'Favorites',
       icon: const Icon(Icons.favorite),
       onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => FavoritesPage()),
-        );
-      },
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => FavoritesPage(
+        loadFavoriteIds: cache.getFavoriteScheduleIds,
+        loadTrips: () => cache.getRecords('bus_trips'),
+      ),
+    ),
+  );
+},
+
     ),
         ],
       ),
