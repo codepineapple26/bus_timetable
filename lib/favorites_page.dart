@@ -5,10 +5,17 @@ class FavoritesPage extends StatefulWidget {
     super.key,
     required this.loadFavoriteIds,
     required this.loadTrips,
+    required this.tripBuilder,
   });
 
   final Future<Set<String>> Function() loadFavoriteIds;
   final Future<List<Map<String, dynamic>>> Function() loadTrips;
+
+  /// Pass the same widget builder used to display a trip on the timetable.
+  final Widget Function(
+    BuildContext context,
+    Map<String, dynamic> trip,
+  ) tripBuilder;
 
   @override
   State<FavoritesPage> createState() => _FavoritesPageState();
@@ -24,12 +31,18 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   Future<List<Map<String, dynamic>>> _loadFavorites() async {
-    final ids = await widget.loadFavoriteIds();
+    final favoriteIds = await widget.loadFavoriteIds();
     final trips = await widget.loadTrips();
 
     return trips
-        .where((trip) => ids.contains(trip['id']?.toString()))
+        .where((trip) => favoriteIds.contains(trip['id']?.toString()))
         .toList();
+  }
+
+  Future<void> _refresh() async {
+    final future = _loadFavorites();
+    setState(() => _favoritesFuture = future);
+    await future;
   }
 
   @override
@@ -42,26 +55,27 @@ class _FavoritesPageState extends State<FavoritesPage> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
+
           if (snapshot.hasError) {
-            return Center(child: Text('Could not load favorites: ${snapshot.error}'));
+            return Center(
+              child: Text('Could not load favorites: ${snapshot.error}'),
+            );
           }
 
           final trips = snapshot.data ?? [];
+
           if (trips.isEmpty) {
             return const Center(child: Text('No favorite trips yet.'));
           }
 
-          return ListView.builder(
-            itemCount: trips.length,
-            itemBuilder: (context, index) {
-              final trip = trips[index];
-              final title = trip['route_name'] ??
-                  trip['name'] ??
-                  trip['id'] ??
-                  'Favorite trip';
-
-              return ListTile(title: Text(title.toString()));
-            },
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView.builder(
+              itemCount: trips.length,
+              itemBuilder: (context, index) {
+                return widget.tripBuilder(context, trips[index]);
+              },
+            ),
           );
         },
       ),
