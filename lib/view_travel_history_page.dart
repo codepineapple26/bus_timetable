@@ -119,58 +119,60 @@ class _ViewTravelHistoryPageState extends State<ViewTravelHistoryPage> {
                       ),
                     ],
                   )
-            ListView.builder(
-  itemCount: _visits.length + (_hasMore ? 1 : 0),
-  itemBuilder: (context, index) {
-    if (index == _visits.length) {
-      return Padding(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: _loading
-              ? const CircularProgressIndicator()
-              : TextButton(
-                  onPressed: _loadVisits,
-                  child: const Text('Load more'),
+
+  body: ListView.builder(
+    itemCount: _visits.length + (_hasMore ? 1 : 0),
+    itemBuilder: (context, index) {
+      if (index == _visits.length) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: _loading
+                ? const CircularProgressIndicator()
+                : TextButton(
+                    onPressed: _loadVisits,
+                    child: const Text('Load more'),
+                  ),
+          ),
+        );
+      }
+
+      final visit = _visits[index];
+      final routeLabel = _scheduleDescription(visit);
+      final rawDate = visit.data['visit_time']?.toString();
+      final date =
+          rawDate == null ? null : DateTime.tryParse(rawDate)?.toLocal();
+      final notes = visit.data['notes']?.toString() ?? '';
+
+      return Card(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: ListTile(
+          title: Text(routeLabel),
+          subtitle: Text(
+            [
+              if (date != null)
+                MaterialLocalizations.of(context).formatMediumDate(date),
+              if (notes.isNotEmpty) notes,
+            ].join('\n'),
+          ),
+          isThreeLine: notes.isNotEmpty,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TravelVisitDetailsPage(
+                  visit: visit,
+                  routeLabel: routeLabel,
                 ),
+              ),
+            );
+          },
         ),
       );
-    }
+    },
+  ),
 
-    final visit = _visits[index];
-    final routeLabel = _scheduleDescription(visit);
-    final rawDate = visit.data['visit_time']?.toString();
-    final date = rawDate == null
-        ? null
-        : DateTime.tryParse(rawDate)?.toLocal();
-    final notes = visit.data['notes']?.toString() ?? '';
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: ListTile(
-        title: Text(routeLabel),
-        subtitle: Text(
-          [
-            if (date != null)
-              MaterialLocalizations.of(context).formatMediumDate(date),
-            if (notes.isNotEmpty) notes,
-          ].join('\n'),
-        ),
-        isThreeLine: notes.isNotEmpty,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => TravelVisitDetailsPage(
-                visit: visit,
-                routeLabel: routeLabel,
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  },
-),
 
       ),
     );
