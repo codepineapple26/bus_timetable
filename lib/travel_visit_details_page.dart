@@ -16,8 +16,9 @@ class TravelVisitDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final photoPath = visit['photo_path']?.toString();
     final visitTime = visit['visit_time']?.toString() ?? '';
-    final attachments = (visit['attachments_json'] as List?) ??
-        const <dynamic>[];
+    final rawAttachments = visit['attachments_json'];
+    final attachments =
+        rawAttachments is List ? rawAttachments : const <dynamic>[];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Travel details')),
