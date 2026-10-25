@@ -760,9 +760,10 @@ class _TimetablePageState extends State<TimetablePage> {
     context,
     MaterialPageRoute(
       builder: (_) => FavoritesPage(
-        loadFavoriteIds: cache.getFavoriteScheduleIds,
-        loadTrips: () => cache.getRecords('bus_trips'),
-      ),
+  loadFavoriteIds: cache.getFavoriteScheduleIds,
+  loadTrips: () => cache.getRecords('bus_trips'),
+  tripBuilder: (context, trip) => _buildTripCard(trip),
+),
     ),
   );
 },
