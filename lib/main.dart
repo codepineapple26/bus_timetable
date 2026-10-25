@@ -41,23 +41,70 @@ class LocalCache {
   late final Database db;
 
   Future<void> init() async {
-    final directory = await getDatabasesPath();
+  final directory = await getDatabasesPath();
 
-    db = await openDatabase(
-      p.join(directory, 'bus_timetable.db'),
-      version: 1,
-      onCreate: (database, version) async {
+  db = await openDatabase(
+    p.join(directory, 'bus_timetable.db'),
+    version: 2,
+    onCreate: (database, version) async {
+      await database.execute('''
+        CREATE TABLE cached_records (
+          collection_name TEXT NOT NULL,
+          record_id TEXT NOT NULL,
+          json TEXT NOT NULL,
+          PRIMARY KEY (collection_name, record_id)
+        )
+      ''');
+
+      await database.execute('''
+        CREATE TABLE IF NOT EXISTS bus_favorites (
+          schedule_id TEXT PRIMARY KEY,
+          created_at TEXT NOT NULL
+        )
+      ''');
+    },
+    onUpgrade: (database, oldVersion, newVersion) async {
+      if (oldVersion < 2) {
         await database.execute('''
-          CREATE TABLE cached_records (
-            collection_name TEXT NOT NULL,
-            record_id TEXT NOT NULL,
-            json TEXT NOT NULL,
-            PRIMARY KEY (collection_name, record_id)
+          CREATE TABLE IF NOT EXISTS bus_favorites (
+            schedule_id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL
           )
         ''');
+      }
+    },
+  );
+}
+
+  Future<Set<String>> getFavoriteScheduleIds() async {
+    final rows = await db.query(
+      'bus_favorites',
+      columns: ['schedule_id'],
+    );
+
+    return rows.map((row) => row['schedule_id'] as String).toSet();
+  }
+
+  Future<void> addFavorite(String scheduleId) async {
+    await db.insert(
+      'bus_favorites',
+      {
+        'schedule_id': scheduleId,
+        'created_at': DateTime.now().toIso8601String(),
       },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
     );
   }
+
+  Future<void> removeFavorite(String scheduleId) async {
+    await db.delete(
+      'bus_favorites',
+      where: 'schedule_id = ?',
+      whereArgs: [scheduleId],
+    );
+  }
+}
+  
 
   Future<void> replaceCollection(
     String collection,
@@ -122,6 +169,8 @@ class _TimetablePageState extends State<TimetablePage> {
 
   String? cityId;
   String? stationId;
+  Set<String> favoriteScheduleIds = {};
+
   TimeOfDay? _departuresAfter;
 
   bool syncing = false;
