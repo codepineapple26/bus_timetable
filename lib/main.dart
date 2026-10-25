@@ -41,6 +41,7 @@ class BusTimetableApp extends StatelessWidget {
   }
 }
 
+
 class LocalCache {
   late final Database db;
 
@@ -67,7 +68,6 @@ class LocalCache {
         if (oldVersion < 2) {
           await _createFavoritesTable(database);
         }
-
         if (oldVersion < 3) {
           await _createTravelOutboxTable(database);
         }
@@ -100,7 +100,95 @@ class LocalCache {
     ''');
   }
 
-  /// Save a travel record locally first. It can be synced to PocketBase later.
+  // Favorites
+
+  Future<List<String>> getFavoriteScheduleIds() async {
+    final rows = await db.query('bus_favorites');
+    return rows.map((row) => row['schedule_id'] as String).toList();
+  }
+
+  Future<void> addFavorite(String scheduleId) async {
+    await db.insert(
+      'bus_favorites',
+      {
+        'schedule_id': scheduleId,
+        'created_at': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  Future<void> removeFavorite(String scheduleId) async {
+    await db.delete(
+      'bus_favorites',
+      where: 'schedule_id = ?',
+      whereArgs: [scheduleId],
+    );
+  }
+
+  // Cached PocketBase collections
+
+  Future<List<Map<String, dynamic>>> getRecords(String collection) async {
+    final rows = await db.query(
+      'cached_records',
+      where: 'collection_name = ?',
+      whereArgs: [collection],
+    );
+
+    return rows.map((row) {
+      return Map<String, dynamic>.from(
+        jsonDecode(row['json'] as String) as Map,
+      );
+    }).toList();
+  }
+
+  Future<void> replaceCollection(
+    String collection,
+    List<dynamic> records,
+  ) async {
+    await db.transaction((txn) async {
+      await txn.delete(
+        'cached_records',
+        where: 'collection_name = ?',
+        whereArgs: [collection],
+      );
+
+      for (final record in records) {
+        final Map<String, dynamic> json = _recordToMap(record);
+        final String? id = json['id']?.toString();
+
+        if (id == null || id.isEmpty) {
+          continue;
+        }
+
+        await txn.insert(
+          'cached_records',
+          {
+            'collection_name': collection,
+            'record_id': id,
+            'json': jsonEncode(json),
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
+  Map<String, dynamic> _recordToMap(dynamic record) {
+    if (record is Map<String, dynamic>) {
+      return record;
+    }
+    if (record is Map) {
+      return Map<String, dynamic>.from(record);
+    }
+
+    // Supports PocketBase RecordModel objects.
+    final converted = record.toJson();
+    return Map<String, dynamic>.from(converted as Map);
+  }
+
+  // Offline travel history
+
   Future<void> saveTravelVisit({
     required String localId,
     String? scheduleId,
@@ -126,7 +214,6 @@ class LocalCache {
     );
   }
 
-  /// Includes both pending and already-synced records stored on this device.
   Future<List<Map<String, dynamic>>> getTravelHistory() {
     return db.query(
       'bus_visits_outbox',
