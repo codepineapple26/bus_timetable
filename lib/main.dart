@@ -18,6 +18,7 @@ import 'favorites_page.dart';
 // Change this path to the location of your travel-record form.
 import 'add_visit_page.dart';
 import 'view_travel_history_page.dart';
+import 'travel_visit_details_page.dart';
 
 const pbUrl = 'http://10.253.154.218:8090';
 final pb = PocketBase(pbUrl);
