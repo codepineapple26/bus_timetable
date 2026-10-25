@@ -2,16 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:pocketbase/pocketbase.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -41,9 +39,6 @@ class BusTimetableApp extends StatelessWidget {
 
 class LocalCache {
   late final Database db;
-
-  
-
 
   Future<void> init() async {
     final directory = await getDatabasesPath();
@@ -125,17 +120,14 @@ class _TimetablePageState extends State<TimetablePage> {
   Timer? _clockTimer;
   String _tripSearch = '';
 
-  String? districtId;
-  String? talukId;
   String? cityId;
   String? stationId;
+  TimeOfDay? _departuresAfter;
 
   bool syncing = false;
   String syncMessage = 'Loading saved timetables…';
 
   static const _locationCollections = [
-    'bus_districts',
-    'bus_taluks',
     'bus_cities',
     'bus_stations',
   ];
@@ -195,10 +187,12 @@ class _TimetablePageState extends State<TimetablePage> {
     if (!mounted) return;
 
     setState(() {
-      if (!_containsId(districts, districtId)) districtId = null;
-      if (!_containsId(taluks, talukId)) talukId = null;
-      if (!_containsId(cities, cityId)) cityId = null;
-      if (!_containsId(stations, stationId)) stationId = null;
+      if (!_containsId(cities, cityId)) {
+        cityId = null;
+        stationId = null;
+      } else if (!_containsId(stations, stationId)) {
+        stationId = null;
+      }
     });
   }
 
@@ -207,26 +201,35 @@ class _TimetablePageState extends State<TimetablePage> {
   }
 
   Future<bool> _ensureLocalNetworkAccess() async {
-  if (!Platform.isAndroid) return true;
+    if (!Platform.isAndroid) return true;
 
-  final android = await DeviceInfoPlugin().androidInfo;
-  if (android.version.sdkInt < 37) return true;
+    final androidInfo = await DeviceInfoPlugin().androidInfo;
+    if (androidInfo.version.sdkInt < 37) return true;
 
-  final status = await Permission.accessLocalNetwork.request();
-  if (status.isGranted) return true;
+    final status = await Permission.accessLocalNetwork.request();
+    if (status.isGranted) return true;
 
-  if (status.isPermanentlyDenied) {
-    await openAppSettings();
+    if (status.isPermanentlyDenied) {
+      await openAppSettings();
+    }
+
+    return false;
   }
-  return false;
-}
+
   Future<void> _sync() async {
-
-    if (!await _ensureLocalNetworkAccess()) {
-    // Show an error in the UI: “Allow local network access to sync.”
-    return;
-  }
     if (syncing || !mounted) return;
+
+    final hasLocalNetworkAccess = await _ensureLocalNetworkAccess();
+    if (!hasLocalNetworkAccess) {
+      if (mounted) {
+        setState(() {
+          syncMessage = 'Allow local network access to sync timetables.';
+        });
+      }
+      return;
+    }
+
+    if (!mounted) return;
 
     setState(() {
       syncing = true;
@@ -239,8 +242,7 @@ class _TimetablePageState extends State<TimetablePage> {
         await cache.replaceCollection(collection, fetched);
       }
 
-      final timetables =
-          await pb.collection('bus_timetables').getFullList();
+      final timetables = await pb.collection('bus_timetables').getFullList();
       await cache.replaceCollection('bus_timetables', timetables);
 
       final trips = await pb.collection('bus_trips').getFullList();
@@ -302,25 +304,65 @@ class _TimetablePageState extends State<TimetablePage> {
     );
   }
 
-  List<Map<String, dynamic>> get districts => _records('bus_districts');
+  String _name(Map<String, dynamic> record) {
+    return record['name']?.toString() ??
+        record['title']?.toString() ??
+        record['city_name']?.toString() ??
+        record['station_name']?.toString() ??
+        'Unnamed';
+  }
 
-  List<Map<String, dynamic>> get taluks => _records('bus_taluks')
-      .where(
-        (record) => _recordRelationId(record, 'district') == districtId,
-      )
-      .toList();
+  List<Map<String, dynamic>> get cities {
+    final result = [..._records('bus_cities')];
+    result.sort((a, b) => _name(a).compareTo(_name(b)));
+    return result;
+  }
 
-  List<Map<String, dynamic>> get cities => _records('bus_cities')
-      .where(
-        (record) => _recordRelationId(record, 'taluk') == talukId,
-      )
-      .toList();
+  List<Map<String, dynamic>> get stations {
+    if (cityId == null) return [];
 
-  List<Map<String, dynamic>> get stations => _records('bus_stations')
-      .where(
-        (record) => _recordRelationId(record, 'city') == cityId,
-      )
-      .toList();
+    final result = _records('bus_stations')
+        .where((record) => _recordRelationId(record, 'city') == cityId)
+        .toList();
+
+    result.sort((a, b) => _name(a).compareTo(_name(b)));
+    return result;
+  }
+
+  Widget _selector({
+    required String label,
+    required String? selectedId,
+    required List<Map<String, dynamic>> options,
+    required ValueChanged<String?> onChanged,
+  }) {
+    final isValidSelection = options.any(
+      (option) => option['id']?.toString() == selectedId,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<String>(
+        initialValue: isValidSelection ? selectedId : null,
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+        ),
+        items: options
+            .map((record) {
+              final id = record['id']?.toString();
+              if (id == null) return null;
+
+              return DropdownMenuItem<String>(
+                value: id,
+                child: Text(_name(record)),
+              );
+            })
+            .whereType<DropdownMenuItem<String>>()
+            .toList(),
+        onChanged: options.isEmpty ? null : onChanged,
+      ),
+    );
+  }
 
   bool _isPublished(Map<String, dynamic> record) {
     final status = record['status']?.toString().toLowerCase().trim() ?? '';
@@ -374,43 +416,38 @@ class _TimetablePageState extends State<TimetablePage> {
 
     final timetableId = timetable['id']?.toString() ?? '';
 
-    return _records('bus_trips')
+    final result = _records('bus_trips')
         .where(
-          (record) =>
-              _recordRelationId(record, 'timetable') == timetableId,
+          (record) => _recordRelationId(record, 'timetable') == timetableId,
         )
         .toList()
       ..sort(
         (a, b) => _departureMinutes(a['departure_time'])
             .compareTo(_departureMinutes(b['departure_time'])),
       );
-  }
 
-  Map<String, dynamic>? get nextDeparture {
-    final now = DateTime.now();
-    final currentMinutes = now.hour * 60 + now.minute;
-
-    for (final trip in trips) {
-      final minutes = _departureMinutes(trip['departure_time']);
-
-      if (minutes >= currentMinutes && minutes < 24 * 60) {
-        return trip;
-      }
-    }
-
-    return null;
+    return result;
   }
 
   List<Map<String, dynamic>> get filteredTrips {
     final query = _tripSearch.trim().toLowerCase();
     final allTrips = trips;
 
-    if (query.isEmpty) return allTrips;
+    final afterMinutes = _departuresAfter == null
+        ? null
+        : _departuresAfter!.hour * 60 + _departuresAfter!.minute;
 
     return allTrips.where((trip) {
-      final destination =
-          (trip['to_place'] ?? '').toString().toLowerCase();
+      final departureMinutes = _departureMinutes(trip['departure_time']);
 
+      if (afterMinutes != null &&
+          (departureMinutes >= 24 * 60 || departureMinutes < afterMinutes)) {
+        return false;
+      }
+
+      if (query.isEmpty) return true;
+
+      final destination = (trip['to_place'] ?? '').toString().toLowerCase();
       final dynamic viaValue = trip['via_places'];
       final List<String> viaPlaces;
 
@@ -427,46 +464,10 @@ class _TimetablePageState extends State<TimetablePage> {
     }).toList();
   }
 
-  String _name(Map<String, dynamic> record) {
-    return record['name']?.toString() ??
-        record['title']?.toString() ??
-        record['station_name']?.toString() ??
-        'Unnamed';
-  }
-
-  Widget _selector({
-    required String label,
-    required String? selectedId,
-    required List<Map<String, dynamic>> options,
-    required ValueChanged<String?> onChanged,
-  }) {
-    final isValidSelection = options.any(
-      (option) => option['id']?.toString() == selectedId,
-    );
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: DropdownButtonFormField<String>(
-        initialValue: isValidSelection ? selectedId : null,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-        ),
-        items: options
-            .map((record) {
-              final id = record['id']?.toString();
-              if (id == null) return null;
-
-              return DropdownMenuItem<String>(
-                value: id,
-                child: Text(_name(record)),
-              );
-            })
-            .whereType<DropdownMenuItem<String>>()
-            .toList(),
-        onChanged: onChanged,
-      ),
-    );
+  String _formatViaPlaces(dynamic value) {
+    if (value == null) return '';
+    if (value is List) return value.join(', ');
+    return value.toString();
   }
 
   Future<void> _shareOriginalPdf(
@@ -518,10 +519,23 @@ class _TimetablePageState extends State<TimetablePage> {
     }
   }
 
+  Future<void> _chooseDeparturesAfter() async {
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: _departuresAfter ?? TimeOfDay.now(),
+      helpText: 'Show departures at or after this time',
+    );
+
+    if (selected != null && mounted) {
+      setState(() => _departuresAfter = selected);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final timetable = selectedTimetable;
-    final departure = nextDeparture;
+    final now = DateTime.now();
+    final currentMinutes = now.hour * 60 + now.minute;
 
     return Scaffold(
       appBar: AppBar(
@@ -532,8 +546,7 @@ class _TimetablePageState extends State<TimetablePage> {
               builder: (buttonContext) => IconButton(
                 tooltip: 'Share original PDF',
                 icon: const Icon(Icons.share),
-                onPressed: () =>
-                    _shareOriginalPdf(buttonContext, timetable),
+                onPressed: () => _shareOriginalPdf(buttonContext, timetable),
               ),
             ),
           IconButton(
@@ -548,81 +561,35 @@ class _TimetablePageState extends State<TimetablePage> {
         children: [
           Text(syncMessage),
           const SizedBox(height: 16),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 150,
-                  child: _selector(
-                    label: 'Dist',
-                    selectedId: districtId,
-                    options: districts,
-                    onChanged: (value) {
-                      setState(() {
-                        _clearTripSearch();
-                        districtId = value;
-                        talukId = null;
-                        cityId = null;
-                        stationId = null;
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 150,
-                  child: _selector(
-                    label: 'Taluk',
-                    selectedId: talukId,
-                    options: taluks,
-                    onChanged: (value) {
-                      setState(() {
-                        _clearTripSearch();
-                        talukId = value;
-                        cityId = null;
-                        stationId = null;
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 150,
-                  child: _selector(
-                    label: 'City',
-                    selectedId: cityId,
-                    options: cities,
-                    onChanged: (value) {
-                      setState(() {
-                        _clearTripSearch();
-                        cityId = value;
-                        stationId = null;
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 150,
-                  child: _selector(
-                    label: 'Station',
-                    selectedId: stationId,
-                    options: stations,
-                    onChanged: (value) {
-                      setState(() {
-                        _clearTripSearch();
-                        stationId = value;
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ),
+
+          // Cities are shown directly; no district/taluk selectors or
+          // horizontal scrolling.
+          _selector(
+            label: 'City',
+            selectedId: cityId,
+            options: cities,
+            onChanged: (value) {
+              setState(() {
+                cityId = value;
+                stationId = null;
+                _clearTripSearch();
+              });
+            },
           ),
-          const SizedBox(height: 16),
+          _selector(
+            label: 'Station',
+            selectedId: stationId,
+            options: stations,
+            onChanged: (value) {
+              setState(() {
+                stationId = value;
+                _clearTripSearch();
+              });
+            },
+          ),
+
           if (stationId == null)
-            const Text('Select a station to view its timetable.')
+            const Text('Select a city and station to view its timetable.')
           else if (timetable == null)
             const Text('No published timetable is available for this station.')
           else ...[
@@ -630,27 +597,12 @@ class _TimetablePageState extends State<TimetablePage> {
               'Departure timetable · Version ${timetable['version'] ?? ''}',
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            if (departure == null)
-              const Text('No more departures listed today.')
-            else
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.directions_bus),
-                  title: Text(
-                    'Next departure: '
-                    '${departure['departure_time'] ?? ''}',
-                  ),
-                  subtitle: Text(
-                    '${departure['from_place'] ?? ''} → '
-                    '${departure['to_place'] ?? ''}',
-                  ),
-                ),
-              ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
+
             TextField(
               controller: _tripSearchController,
               decoration: InputDecoration(
-                labelText: 'Search Destination or via Place',
+                labelText: 'Search destination or via place',
                 hintText: 'For example: Chikkamagalur or Magadi',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _tripSearch.isEmpty
@@ -658,9 +610,7 @@ class _TimetablePageState extends State<TimetablePage> {
                     : IconButton(
                         tooltip: 'Clear search',
                         icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          setState(_clearTripSearch);
-                        },
+                        onPressed: () => setState(_clearTripSearch),
                       ),
                 border: const OutlineInputBorder(),
               ),
@@ -671,21 +621,52 @@ class _TimetablePageState extends State<TimetablePage> {
               },
             ),
             const SizedBox(height: 8),
+
+            OutlinedButton.icon(
+              onPressed: _chooseDeparturesAfter,
+              icon: const Icon(Icons.schedule),
+              label: Text(
+                _departuresAfter == null
+                    ? 'Departures after (optional)'
+                    : 'Departures after '
+                        '${_departuresAfter!.format(context)}',
+              ),
+            ),
+            if (_departuresAfter != null)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => setState(() => _departuresAfter = null),
+                  child: const Text('Clear time filter'),
+                ),
+              ),
+            const SizedBox(height: 8),
+
             if (trips.isEmpty)
               const Text('No trips are saved for this timetable.')
             else if (filteredTrips.isEmpty)
-              const Text('No trips match your search.')
+              const Text('No trips match your search or time filter.')
             else
               ...filteredTrips.map((trip) {
                 final time = trip['departure_time']?.toString() ?? '';
+                final departureMinutes = _departureMinutes(time);
+                final isUpcoming = departureMinutes >= currentMinutes &&
+                    departureMinutes < 24 * 60;
+
                 final type = trip['type_raw']?.toString() ?? '';
-                final via = trip['via_places']?.toString() ?? '';
+                final via = _formatViaPlaces(trip['via_places']);
 
                 return Card(
+                  color: isUpcoming
+                      ? Colors.green.withOpacity(0.12)
+                      : Colors.red.withOpacity(0.12),
                   child: ListTile(
                     leading: Text(
                       time,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: isUpcoming ? Colors.green : Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
                     ),
                     title: Text(
                       '${trip['from_place'] ?? ''} → '
@@ -695,6 +676,10 @@ class _TimetablePageState extends State<TimetablePage> {
                       if (type.isNotEmpty) type,
                       if (via.isNotEmpty) 'Via: $via',
                     ].join(' · ')),
+                    trailing: Icon(
+                      isUpcoming ? Icons.check_circle : Icons.history,
+                      color: isUpcoming ? Colors.green : Colors.red,
+                    ),
                   ),
                 );
               }),
