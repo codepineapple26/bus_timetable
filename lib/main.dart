@@ -13,6 +13,10 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sqflite/sqflite.dart';
 
+// Change this path to the location of your travel-record form.
+import 'add_visit_page.dart';
+import 'view_travel_history_page.dart';
+
 const pbUrl = 'http://10.253.154.218:8090';
 final pb = PocketBase(pbUrl);
 
@@ -41,40 +45,40 @@ class LocalCache {
   late final Database db;
 
   Future<void> init() async {
-  final directory = await getDatabasesPath();
+    final directory = await getDatabasesPath();
 
-  db = await openDatabase(
-    p.join(directory, 'bus_timetable.db'),
-    version: 2,
-    onCreate: (database, version) async {
-      await database.execute('''
-        CREATE TABLE cached_records (
-          collection_name TEXT NOT NULL,
-          record_id TEXT NOT NULL,
-          json TEXT NOT NULL,
-          PRIMARY KEY (collection_name, record_id)
-        )
-      ''');
+    db = await openDatabase(
+      p.join(directory, 'bus_timetable.db'),
+      version: 2,
+      onCreate: (database, version) async {
+        await database.execute('''
+          CREATE TABLE cached_records (
+            collection_name TEXT NOT NULL,
+            record_id TEXT NOT NULL,
+            json TEXT NOT NULL,
+            PRIMARY KEY (collection_name, record_id)
+          )
+        ''');
 
-      await database.execute('''
-        CREATE TABLE IF NOT EXISTS bus_favorites (
-          schedule_id TEXT PRIMARY KEY,
-          created_at TEXT NOT NULL
-        )
-      ''');
-    },
-    onUpgrade: (database, oldVersion, newVersion) async {
-      if (oldVersion < 2) {
         await database.execute('''
           CREATE TABLE IF NOT EXISTS bus_favorites (
             schedule_id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL
           )
         ''');
-      }
-    },
-  );
-}
+      },
+      onUpgrade: (database, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await database.execute('''
+            CREATE TABLE IF NOT EXISTS bus_favorites (
+              schedule_id TEXT PRIMARY KEY,
+              created_at TEXT NOT NULL
+            )
+          ''');
+        }
+      },
+    );
+  }
 
   Future<Set<String>> getFavoriteScheduleIds() async {
     final rows = await db.query(
@@ -103,8 +107,6 @@ class LocalCache {
       whereArgs: [scheduleId],
     );
   }
-}
-  
 
   Future<void> replaceCollection(
     String collection,
@@ -216,6 +218,7 @@ class _TimetablePageState extends State<TimetablePage> {
   Future<void> _start() async {
     try {
       await cache.init();
+      favoriteScheduleIds = await cache.getFavoriteScheduleIds();
       await _loadCache();
       await _sync();
     } catch (e) {
@@ -322,6 +325,45 @@ class _TimetablePageState extends State<TimetablePage> {
     }
   }
 
+  Future<void> _toggleFavorite(String scheduleId) async {
+    if (favoriteScheduleIds.contains(scheduleId)) {
+      await cache.removeFavorite(scheduleId);
+      favoriteScheduleIds.remove(scheduleId);
+    } else {
+      await cache.addFavorite(scheduleId);
+      favoriteScheduleIds.add(scheduleId);
+    }
+
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _markTravelled(
+    Map<String, dynamic> trip,
+    String routeLabel,
+  ) async {
+    final scheduleId = trip['id']?.toString();
+    if (scheduleId == null || scheduleId.isEmpty) return;
+
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddVisitPage(
+          pb: pb,
+          scheduleId: scheduleId,
+          scheduleLabel: routeLabel,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (saved == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Travel recorded')),
+      );
+    }
+  }
+
   List<Map<String, dynamic>> _records(String collection) {
     return records[collection] ?? const [];
   }
@@ -420,8 +462,8 @@ class _TimetablePageState extends State<TimetablePage> {
 
   int _departureMinutes(dynamic value) {
     final time = (value ?? '').toString().trim().toUpperCase();
-    final match = RegExp(r'^(\d{1,2}):?(\d{2})\s*(AM|PM)?$')
-        .firstMatch(time);
+    final match =
+        RegExp(r'^(\d{1,2}):?(\d{2})\s*(AM|PM)?$').firstMatch(time);
 
     if (match == null) return 1 << 30;
 
@@ -611,8 +653,6 @@ class _TimetablePageState extends State<TimetablePage> {
           Text(syncMessage),
           const SizedBox(height: 16),
 
-          // Cities are shown directly; no district/taluk selectors or
-          // horizontal scrolling.
           _selector(
             label: 'City',
             selectedId: cityId,
@@ -677,8 +717,7 @@ class _TimetablePageState extends State<TimetablePage> {
               label: Text(
                 _departuresAfter == null
                     ? 'Departures after (optional)'
-                    : 'Departures after '
-                        '${_departuresAfter!.format(context)}',
+                    : 'Departures after ${_departuresAfter!.format(context)}',
               ),
             ),
             if (_departuresAfter != null)
@@ -704,31 +743,61 @@ class _TimetablePageState extends State<TimetablePage> {
 
                 final type = trip['type_raw']?.toString() ?? '';
                 final via = _formatViaPlaces(trip['via_places']);
+                final routeLabel =
+                    '${trip['from_place'] ?? ''} → ${trip['to_place'] ?? ''}';
+                final scheduleId = trip['id']?.toString() ?? '';
+                final isFavorite =
+                    favoriteScheduleIds.contains(scheduleId);
 
                 return Card(
                   color: isUpcoming
                       ? Colors.green.withOpacity(0.12)
                       : Colors.red.withOpacity(0.12),
-                  child: ListTile(
-                    leading: Text(
-                      time,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: isUpcoming ? Colors.green : Colors.red,
-                            fontWeight: FontWeight.bold,
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: Text(
+                          time,
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color:
+                                        isUpcoming ? Colors.green : Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                        ),
+                        title: Text(routeLabel),
+                        subtitle: Text([
+                          if (type.isNotEmpty) type,
+                          if (via.isNotEmpty) 'Via: $via',
+                        ].join(' · ')),
+                        trailing: IconButton(
+                          tooltip: isFavorite
+                              ? 'Remove favorite'
+                              : 'Add favorite',
+                          icon: Icon(
+                            isFavorite ? Icons.star : Icons.star_border,
+                            color: isFavorite ? Colors.amber : null,
                           ),
-                    ),
-                    title: Text(
-                      '${trip['from_place'] ?? ''} → '
-                      '${trip['to_place'] ?? ''}',
-                    ),
-                    subtitle: Text([
-                      if (type.isNotEmpty) type,
-                      if (via.isNotEmpty) 'Via: $via',
-                    ].join(' · ')),
-                    trailing: Icon(
-                      isUpcoming ? Icons.check_circle : Icons.history,
-                      color: isUpcoming ? Colors.green : Colors.red,
-                    ),
+                          onPressed: scheduleId.isEmpty
+                              ? null
+                              : () => _toggleFavorite(scheduleId),
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(
+                            right: 12,
+                            bottom: 8,
+                          ),
+                          child: TextButton.icon(
+                            onPressed: () => _markTravelled(trip, routeLabel),
+                            icon: const Icon(Icons.directions_bus),
+                            label: const Text('Mark travelled'),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }),
