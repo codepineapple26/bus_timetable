@@ -1,208 +1,153 @@
 import 'package:flutter/material.dart';
-import 'package:pocketbase/pocketbase.dart';
 
-import 'travel_visit_details_page.dart'; // Adjust this path if needed.
-
-class ViewTravelHistoryPage extends StatefulWidget {
-  const ViewTravelHistoryPage({
+class TravelVisitDetailsPage extends StatelessWidget {
+  const TravelVisitDetailsPage({
     super.key,
-    required this.pb,
+    required this.visit,
+    this.schedule,
   });
 
-  final PocketBase pb;
+  /// Accepts the map currently passed by your history screen:
+  /// {'data': visit.data, 'id': visit.id}
+  final Map<String, dynamic> visit;
 
-  @override
-  State<ViewTravelHistoryPage> createState() =>
-      _ViewTravelHistoryPageState();
-}
+  /// Pass the full bus_trips record here, not just its ID.
+  final Map<String, dynamic>? schedule;
 
-class _ViewTravelHistoryPageState extends State<ViewTravelHistoryPage> {
-  final List<RecordModel> _visits = [];
-
-  int _nextPage = 1;
-  bool _hasMore = true;
-  bool _loading = false;
-  String? _error;
- bool _isHiddenField(String key) {
-    final normalized = key.toLowerCase().replaceAll(RegExp(r'[_\s-]'), '');
-    return {
-      'id',
-      'created',
-      'updated',
-      'collectionid',
-      'collectionname',
-      'serialno',
-    }.contains(normalized) ||
-        normalized.endsWith('id');
-  }
-  
-  @override
-  void initState() {
-    super.initState();
-    _loadVisits(reset: true);
+  Map<String, dynamic> get _visitData {
+    final value = visit['data'];
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return visit;
   }
 
-  Future<void> _loadVisits({bool reset = false}) async {
-    if (_loading || (!reset && !_hasMore)) return;
+  String _firstValue(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value == null) continue;
 
-    final page = reset ? 1 : _nextPage;
-
-    setState(() {
-      _loading = true;
-      _error = null;
-
-      if (reset) {
-        _visits.clear();
-        _nextPage = 1;
-        _hasMore = true;
-      }
-    });
-
-    try {
-      final result = await widget.pb.collection('bus_visits').getList(
-            page: page,
-            perPage: 50,
-            filter: 'schedule != ""',
-            sort: '-visit_time',
-            expand: 'schedule',
-          );
-
-      if (!mounted) return;
-
-      setState(() {
-        _visits.addAll(result.items);
-        _nextPage = page + 1;
-        _hasMore = page < result.totalPages;
-      });
-    } catch (error) {
-      if (mounted) {
-        setState(() => _error = error.toString());
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      final text = value.toString().trim();
+      if (text.isNotEmpty && !_looksLikeId(text)) return text;
     }
+    return '';
   }
 
-  
-  String _scheduleDescription(RecordModel visit) {
-  final expandedSchedules = visit.expand['schedule'];
+  bool _looksLikeId(String value) =>
+      RegExp(r'^[a-zA-Z0-9]{15}$').hasMatch(value);
 
-  if (expandedSchedules != null && expandedSchedules.isNotEmpty) {
-    final data = expandedSchedules.first.data;
-
-    final entries = data.entries.where((entry) {
-      return !_isHiddenField(entry.key) &&
-          entry.value != null &&
-          entry.value.toString().isNotEmpty;
-    }).take(5);
-
-    final description = entries
-        .map((entry) => '${entry.key}: ${entry.value}')
-        .join(' • ');
-
-    if (description.isNotEmpty) return description;
+  DateTime? _visitDateTime() {
+    final value = _visitData['visit_time'];
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 
-  return 'Schedule';
-}
+  String _formatRoute(Map<String, dynamic> trip) {
+    final departure = _firstValue(
+      trip,
+      ['departure_time', 'departure', 'time'],
+    );
+    final from = _firstValue(
+      trip,
+      ['from_place', 'from', 'origin'],
+    );
+    final to = _firstValue(
+      trip,
+      ['to_place', 'to', 'destination'],
+    );
+    final type = _firstValue(
+      trip,
+      ['type_raw', 'type', 'bus_type'],
+    );
+    final via = _firstValue(
+      trip,
+      ['via_places', 'via', 'via_place'],
+    );
 
+    final route = [
+      if (departure.isNotEmpty) departure,
+      if (from.isNotEmpty && to.isNotEmpty) '$from → $to',
+      if (type.isNotEmpty) type,
+      if (via.isNotEmpty) 'Via $via',
+    ];
+
+    return route.isEmpty ? 'Route details unavailable' : route.join(' · ');
+  }
 
   @override
   Widget build(BuildContext context) {
+    final data = _visitData;
+    final trip = schedule ?? _expandedSchedule(data);
+    final visitDate = _visitDateTime()?.toLocal();
+
+    final formattedDate = visitDate == null
+        ? 'Date unavailable'
+        : MaterialLocalizations.of(context).formatMediumDate(visitDate);
+
+    final formattedTime = visitDate == null
+        ? ''
+        : MaterialLocalizations.of(context).formatTimeOfDay(
+            TimeOfDay.fromDateTime(visitDate),
+          );
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Travel history'),
-        actions: [
-          IconButton(
-            onPressed: () => _loadVisits(reset: true),
-            icon: const Icon(Icons.refresh),
+      appBar: AppBar(title: const Text('Travel details')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _detail(
+            'Route',
+            _formatRoute(trip),
+          ),
+          _detail(
+            'Date travelled',
+            formattedTime.isEmpty
+                ? formattedDate
+                : '$formattedDate · $formattedTime',
+          ),
+          _detail(
+            'Purpose',
+            data['purpose']?.toString().trim().isNotEmpty == true
+                ? data['purpose'].toString()
+                : '—',
+          ),
+          _detail(
+            'Notes',
+            data['notes']?.toString().trim().isNotEmpty == true
+                ? data['notes'].toString()
+                : '—',
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () => _loadVisits(reset: true),
-        child: _error != null && _visits.isEmpty
-            ? ListView(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text('Could not load travel history: $_error'),
-                  ),
-                ],
-              )
-            : _visits.isEmpty && !_loading
-                ? ListView(
-                    children: const [
-                      Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Text('No travel history yet.'),
-                      ),
-                    ],
-                  )
-                : ListView.builder(
-                    itemCount: _visits.length + (_hasMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _visits.length) {
-                        return Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Center(
-                            child: _loading
-                                ? const CircularProgressIndicator()
-                                : TextButton(
-                                    onPressed: _loadVisits,
-                                    child: const Text('Load more'),
-                                  ),
-                          ),
-                        );
-                      }
+    );
+  }
 
-                      final visit = _visits[index];
-                      final routeLabel = _scheduleDescription(visit);
-                      final rawDate =
-                          visit.data['visit_time']?.toString();
-                      final date = rawDate == null
-                          ? null
-                          : DateTime.tryParse(rawDate)?.toLocal();
-                      final notes =
-                          visit.data['notes']?.toString() ?? '';
+  Map<String, dynamic> _expandedSchedule(Map<String, dynamic> data) {
+    final expand = data['expand'];
+    if (expand is Map) {
+      final expandedSchedule = expand['schedule'];
+      if (expandedSchedule is Map) {
+        return Map<String, dynamic>.from(expandedSchedule);
+      }
+    }
 
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        child: ListTile(
-                          title: Text(routeLabel),
-                          subtitle: Text(
-                            [
-                              if (date != null)
-                                MaterialLocalizations.of(context)
-                                    .formatMediumDate(date),
-                              if (notes.isNotEmpty) notes,
-                            ].join('\n'),
-                          ),
-                          isThreeLine: notes.isNotEmpty,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => TravelVisitDetailsPage(
-  visit: <String, dynamic>{
-    ...visit.data,
-    'id': visit.id,
-  },
-  routeLabel: routeLabel,
-),
+    final embeddedSchedule = data['schedule'];
+    if (embeddedSchedule is Map) {
+      return Map<String, dynamic>.from(embeddedSchedule);
+    }
 
-                              ),
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),
+    return {};
+  }
+
+  Widget _detail(String title, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontSize: 16)),
+          const SizedBox(height: 6),
+          Text(value, style: const TextStyle(color: Colors.black54)),
+        ],
       ),
     );
   }
