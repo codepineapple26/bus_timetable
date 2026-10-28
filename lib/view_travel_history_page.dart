@@ -189,11 +189,11 @@ class _ViewTravelHistoryPageState extends State<ViewTravelHistoryPage> {
                               context,
                               MaterialPageRoute(
                                 builder: (_) => TravelVisitDetailsPage(
-  visit: <String, dynamic>{
-    ...visit.data,
+  visit: {
+    'data': visit.data,
     'id': visit.id,
   },
-  routeLabel: routeLabel,
+  schedule: resolvedScheduleRecord,
 ),
 
                               ),
