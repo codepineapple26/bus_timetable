@@ -11,7 +11,7 @@ class FavoritesPage extends StatefulWidget {
   final Future<Set<String>> Function() loadFavoriteIds;
   final Future<List<Map<String, dynamic>>> Function() loadTrips;
 
-  /// Pass the same widget builder used to display a trip on the timetable.
+  /// Pass the same card builder used on the timetable screen.
   final Widget Function(
     BuildContext context,
     Map<String, dynamic> trip,
@@ -45,6 +45,28 @@ class _FavoritesPageState extends State<FavoritesPage> {
     await future;
   }
 
+  Widget _buildFavoriteTripCard(
+    BuildContext context,
+    Map<String, dynamic> trip,
+  ) {
+    return Stack(
+      children: [
+        widget.tripBuilder(context, trip),
+        const Positioned(
+          top: 8,
+          right: 14,
+          child: IgnorePointer(
+            child: Icon(
+              Icons.star,
+              color: Colors.amber,
+              size: 24,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -71,9 +93,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
           return RefreshIndicator(
             onRefresh: _refresh,
             child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: trips.length,
               itemBuilder: (context, index) {
-                return widget.tripBuilder(context, trips[index]);
+                return _buildFavoriteTripCard(context, trips[index]);
               },
             ),
           );
