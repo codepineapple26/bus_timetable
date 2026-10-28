@@ -193,7 +193,7 @@ class _ViewTravelHistoryPageState extends State<ViewTravelHistoryPage> {
     'data': visit.data,
     'id': visit.id,
   },
-  schedule: resolvedScheduleRecord,
+
 ),
 
                               ),
