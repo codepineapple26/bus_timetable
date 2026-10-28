@@ -768,7 +768,7 @@ class _TimetablePageState extends State<TimetablePage> {
       ),
     );
   },
-)
+
     ),
         ],
       ),
