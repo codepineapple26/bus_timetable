@@ -762,8 +762,10 @@ class _TimetablePageState extends State<TimetablePage> {
     MaterialPageRoute(
       builder: (_) => FavoritesPage(
   loadFavoriteIds: cache.getFavoriteScheduleIds,
-  loadTrips: () => cache.getRecords('bus_trips'),
+  loadTrips: _loadHomeTrips, // Return the same formatted trip maps used on Home
   tripBuilder: (context, trip) => _buildTripCard(trip),
+)
+
 
 ),
     ),
