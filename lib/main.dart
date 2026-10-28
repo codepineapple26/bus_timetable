@@ -753,26 +753,22 @@ class _TimetablePageState extends State<TimetablePage> {
     );
   },
 ),
-          IconButton(
-      tooltip: 'Favorites',
-      icon: const Icon(Icons.favorite),
-      onPressed: () {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => return FavoritesPage(
-  loadFavoriteIds: cache.getFavoriteScheduleIds,
-  loadTrips: () => cache.getRecords('bus_trips'),
-  tripBuilder: (context, trip) => _buildTripCard(trip),
-),
-
-
-
-),
-    ),
-  );
-},
-
+     IconButton(
+  tooltip: 'Favorites',
+  icon: const Icon(Icons.favorite),
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FavoritesPage(
+          loadFavoriteIds: cache.getFavoriteScheduleIds,
+          loadTrips: () => cache.getRecords('bus_trips'),
+          tripBuilder: (context, trip) => _buildTripCard(trip),
+        ),
+      ),
+    );
+  },
+)
     ),
         ],
       ),
