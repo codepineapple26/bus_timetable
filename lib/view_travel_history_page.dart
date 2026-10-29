@@ -23,19 +23,7 @@ class _ViewTravelHistoryPageState extends State<ViewTravelHistoryPage> {
   bool _hasMore = true;
   bool _loading = false;
   String? _error;
- bool _isHiddenField(String key) {
-    final normalized = key.toLowerCase().replaceAll(RegExp(r'[_\s-]'), '');
-    return {
-      'id',
-      'created',
-      'updated',
-      'collectionid',
-      'collectionname',
-      'serialno',
-    }.contains(normalized) ||
-        normalized.endsWith('id');
-  }
-  
+
   @override
   void initState() {
     super.initState();
@@ -85,29 +73,215 @@ class _ViewTravelHistoryPageState extends State<ViewTravelHistoryPage> {
     }
   }
 
-  
-  String _scheduleDescription(RecordModel visit) {
-  final expandedSchedules = visit.expand['schedule'];
+  Map<String, dynamic> _scheduleData(RecordModel visit) {
+    final schedules = visit.expand['schedule'];
 
-  if (expandedSchedules != null && expandedSchedules.isNotEmpty) {
-    final data = expandedSchedules.first.data;
+    if (schedules == null || schedules.isEmpty) {
+      return {};
+    }
 
-    final entries = data.entries.where((entry) {
-      return !_isHiddenField(entry.key) &&
-          entry.value != null &&
-          entry.value.toString().isNotEmpty;
-    }).take(5);
-
-    final description = entries
-        .map((entry) => '${entry.key}: ${entry.value}')
-        .join(' • ');
-
-    if (description.isNotEmpty) return description;
+    return schedules.first.data;
   }
 
-  return 'Schedule';
-}
+  String _field(Map<String, dynamic> data, List<String> keys) {
+    for (final key in keys) {
+      final value = data[key]?.toString().trim();
 
+      if (value != null &&
+          value.isNotEmpty &&
+          !RegExp(r'^[a-zA-Z0-9]{15}$').hasMatch(value)) {
+        return value;
+      }
+    }
+
+    return '';
+  }
+
+  String _formatDeparture(BuildContext context, String rawDeparture) {
+    final parsed = DateTime.tryParse(rawDeparture);
+
+    if (parsed == null) {
+      return rawDeparture;
+    }
+
+    return MaterialLocalizations.of(context).formatTimeOfDay(
+      TimeOfDay.fromDateTime(parsed.toLocal()),
+    );
+  }
+
+  String _formatTravelDate(BuildContext context, RecordModel visit) {
+    final rawDate = visit.data['visit_time']?.toString();
+
+    if (rawDate == null || rawDate.isEmpty) {
+      return 'Date travelled unavailable';
+    }
+
+    final date = DateTime.tryParse(rawDate)?.toLocal();
+
+    if (date == null) {
+      return 'Date travelled unavailable';
+    }
+
+    final localizations = MaterialLocalizations.of(context);
+    final dateText = localizations.formatMediumDate(date);
+    final timeText = localizations.formatTimeOfDay(
+      TimeOfDay.fromDateTime(date),
+    );
+
+    return '$dateText · $timeText';
+  }
+
+  void _openVisitDetails(BuildContext context, RecordModel visit) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TravelVisitDetailsPage(
+          visit: {
+            'data': visit.data,
+            'id': visit.id,
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVisitCard(BuildContext context, RecordModel visit) {
+    final schedule = _scheduleData(visit);
+
+    final from = _field(
+      schedule,
+      ['from_city', 'origin', 'source', 'from', 'from_place'],
+    );
+
+    final to = _field(
+      schedule,
+      ['to_city', 'destination', 'to', 'to_place'],
+    );
+
+    final route = _field(schedule, ['route_name', 'name']);
+
+    final rawDeparture = _field(
+      schedule,
+      ['departure_time', 'depart_time', 'departure'],
+    );
+
+    final service = _field(
+      schedule,
+      ['service_type', 'bus_type', 'type_raw', 'type', 'bus_name'],
+    );
+
+    final via = _field(
+      schedule,
+      ['via_places', 'via_place', 'via', 'stops'],
+    );
+
+    final title = from.isNotEmpty && to.isNotEmpty
+        ? '$from → $to'
+        : route.isNotEmpty
+            ? route
+            : 'Bus trip';
+
+    final departure = _formatDeparture(context, rawDeparture);
+
+    final serviceText = [
+      if (service.isNotEmpty) service,
+      if (via.isNotEmpty) 'Via: $via',
+    ].join(' · ');
+
+    final travelDate = _formatTravelDate(context, visit);
+    final notes = visit.data['notes']?.toString().trim() ?? '';
+
+    return Card(
+      color: const Color(0xFFC2B0AC),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _openVisitDetails(context, visit),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 58,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 24),
+                  child: Text(
+                    departure,
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (serviceText.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        serviceText,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.history,
+                          size: 16,
+                          color: Colors.teal,
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            'Travelled: $travelDate',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (notes.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        notes,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadMoreButton() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Center(
+        child: _loading
+            ? const CircularProgressIndicator()
+            : TextButton(
+                onPressed: _loadVisits,
+                child: const Text('Load more'),
+              ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -128,7 +302,9 @@ class _ViewTravelHistoryPageState extends State<ViewTravelHistoryPage> {
                 children: [
                   Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text('Could not load travel history: $_error'),
+                    child: Text(
+                      'Could not load travel history: $_error',
+                    ),
                   ),
                 ],
               )
@@ -142,64 +318,15 @@ class _ViewTravelHistoryPageState extends State<ViewTravelHistoryPage> {
                     ],
                   )
                 : ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     itemCount: _visits.length + (_hasMore ? 1 : 0),
                     itemBuilder: (context, index) {
                       if (index == _visits.length) {
-                        return Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Center(
-                            child: _loading
-                                ? const CircularProgressIndicator()
-                                : TextButton(
-                                    onPressed: _loadVisits,
-                                    child: const Text('Load more'),
-                                  ),
-                          ),
-                        );
+                        return _buildLoadMoreButton();
                       }
 
-                      final visit = _visits[index];
-                      final routeLabel = _scheduleDescription(visit);
-                      final rawDate =
-                          visit.data['visit_time']?.toString();
-                      final date = rawDate == null
-                          ? null
-                          : DateTime.tryParse(rawDate)?.toLocal();
-                      final notes =
-                          visit.data['notes']?.toString() ?? '';
-
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        child: ListTile(
-                          title: Text(routeLabel),
-                          subtitle: Text(
-                            [
-                              if (date != null)
-                                MaterialLocalizations.of(context)
-                                    .formatMediumDate(date),
-                              if (notes.isNotEmpty) notes,
-                            ].join('\n'),
-                          ),
-                          isThreeLine: notes.isNotEmpty,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => TravelVisitDetailsPage(
-  visit: {
-    'data': visit.data,
-    'id': visit.id,
-  },
-),
-
-                              ),
-                            );
-                          },
-                        ),
-                      );
+                      return _buildVisitCard(context, _visits[index]);
                     },
                   ),
       ),
