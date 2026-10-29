@@ -106,10 +106,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
           }
 
           final trips = snapshot.data ?? [];
+          final filteredTrips = filterTrips(trips, _tripSearch);
+          final visibleTrips = sortTrips(filteredTrips, _tripSort);
 
           if (trips.isEmpty) {
             return const Center(child: Text('No favorite trips yet.'));
           }
+
+          if (visibleTrips.isEmpty) {
+  return const Center(child: Text('No trips match your search.'));
+}
 
           return RefreshIndicator(
             onRefresh: _refresh,
@@ -118,8 +124,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: trips.length,
               itemBuilder: (context, index) {
-                final trip = trips[index];
-
+                final trip = visibleTrips[index];
                 return widget.tripBuilder(
                   context,
                   trip,
