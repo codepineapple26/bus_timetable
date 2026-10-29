@@ -1,8 +1,8 @@
 enum TripSort {
   travelDateNewest,
   departureEarliest,
-  fromPlace,
-  toPlace,
+  from,
+  to,
 }
 
 Map<String, dynamic> _scheduleOf(Map<String, dynamic> item) {
@@ -79,12 +79,12 @@ List<Map<String, dynamic>> sortTrips(
         if (timeB == null) return -1;
         return timeA.compareTo(timeB);
 
-      case TripSort.fromPlace:
+      case TripSort.from:
         return _text(scheduleA, ['from_place', 'from'])
             .toLowerCase()
             .compareTo(_text(scheduleB, ['from_place', 'from']).toLowerCase());
 
-      case TripSort.toPlace:
+      case TripSort.to:
         return _text(scheduleA, ['to_place', 'to'])
             .toLowerCase()
             .compareTo(_text(scheduleB, ['to_place', 'to']).toLowerCase());
