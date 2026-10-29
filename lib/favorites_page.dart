@@ -4,6 +4,8 @@ typedef FavoriteTripBuilder = Widget Function(
   BuildContext context,
   Map<String, dynamic> trip, {
   required bool isFavorite,
+  required VoidCallback onFavoriteTap,
+  required VoidCallback onMarkTravelled,
 });
 
 class FavoritesPage extends StatefulWidget {
@@ -12,11 +14,19 @@ class FavoritesPage extends StatefulWidget {
     required this.loadFavoriteIds,
     required this.loadTrips,
     required this.tripBuilder,
+    required this.onRemoveFavorite,
+    required this.onMarkTravelled,
   });
 
   final Future<Set<String>> Function() loadFavoriteIds;
   final Future<List<Map<String, dynamic>>> Function() loadTrips;
   final FavoriteTripBuilder tripBuilder;
+
+  /// Persist the removal from your favorites storage.
+  final Future<void> Function(Map<String, dynamic> trip) onRemoveFavorite;
+
+  /// Create the bus_visits record in your PocketBase logic.
+  final Future<void> Function(Map<String, dynamic> trip) onMarkTravelled;
 
   @override
   State<FavoritesPage> createState() => _FavoritesPageState();
@@ -44,6 +54,32 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final future = _loadFavorites();
     setState(() => _favoritesFuture = future);
     await future;
+  }
+
+  Future<void> _removeFavorite(Map<String, dynamic> trip) async {
+    try {
+      await widget.onRemoveFavorite(trip);
+      await _refresh();
+    } catch (error) {
+      _showMessage('Could not remove favorite: $error');
+    }
+  }
+
+  Future<void> _markTravelled(Map<String, dynamic> trip) async {
+    try {
+      await widget.onMarkTravelled(trip);
+      _showMessage('Travel logged. You can find it in Travel History.');
+    } catch (error) {
+      _showMessage('Could not log travel: $error');
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -76,10 +112,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: trips.length,
               itemBuilder: (context, index) {
+                final trip = trips[index];
+
                 return widget.tripBuilder(
                   context,
-                  trips[index],
+                  trip,
                   isFavorite: true,
+                  onFavoriteTap: () => _removeFavorite(trip),
+                  onMarkTravelled: () => _markTravelled(trip),
                 );
               },
             ),
