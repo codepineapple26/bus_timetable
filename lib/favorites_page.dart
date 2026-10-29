@@ -26,7 +26,9 @@ class FavoritesPage extends StatefulWidget {
   final Future<void> Function(Map<String, dynamic> trip) onRemoveFavorite;
 
   /// Create the bus_visits record in your PocketBase logic.
-  final Future<void> Function(Map<String, dynamic> trip) onMarkTravelled;
+final Future<bool> Function(Map<String, dynamic> trip) onMarkTravelled;
+
+
 
   @override
   State<FavoritesPage> createState() => _FavoritesPageState();
@@ -65,14 +67,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
     }
   }
 
-  Future<void> _markTravelled(Map<String, dynamic> trip) async {
-    try {
-      await widget.onMarkTravelled(trip);
+ Future<void> _markTravelled(Map<String, dynamic> trip) async {
+  try {
+    final saved = await widget.onMarkTravelled(trip);
+    if (saved) {
       _showMessage('Travel logged. You can find it in Travel History.');
-    } catch (error) {
-      _showMessage('Could not log travel: $error');
     }
+  } catch (error) {
+    _showMessage('Could not log travel: $error');
   }
+}
+
 
   void _showMessage(String message) {
     if (!mounted) return;
