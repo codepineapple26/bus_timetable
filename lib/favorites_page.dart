@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'utils/trip_search.dart';
+import 'utils/trip_sorting.dart';
 
 typedef FavoriteTripBuilder = Widget Function(
   BuildContext context,
