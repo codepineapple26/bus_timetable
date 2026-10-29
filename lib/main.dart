@@ -933,10 +933,16 @@ class _TimetablePageState extends State<TimetablePage> {
       ),
     );
   }
-Widget _buildTripCard(Map<String, dynamic> trip) {
+Widget _buildTripCard(
+  Map<String, dynamic> trip, {
+  bool isFavorite = false,
+  VoidCallback? onFavoriteTap,
+  VoidCallback? onMarkTravelled,
+}) {
   String field(List<String> keys) {
     for (final key in keys) {
       final value = trip[key]?.toString().trim();
+
       if (value != null &&
           value.isNotEmpty &&
           !RegExp(r'^[a-zA-Z0-9]{15}$').hasMatch(value)) {
@@ -946,11 +952,23 @@ Widget _buildTripCard(Map<String, dynamic> trip) {
     return '';
   }
 
-  final from = field(['from_city', 'origin', 'source', 'from']);
-  final to = field(['to_city', 'destination', 'to']);
+  final from = field(['from_city', 'origin', 'source', 'from', 'from_place']);
+  final to = field(['to_city', 'destination', 'to', 'to_place']);
   final route = field(['route_name', 'name']);
   final departure = field(['departure_time', 'depart_time', 'departure']);
-  final bus = field(['bus_name', 'bus_number', 'bus']);
+
+  // Prefer the service/type fields so this can show values like EV or EXP.
+  final service = field([
+    'type_raw',
+    'service_type',
+    'bus_type',
+    'type',
+    'bus_name',
+    'bus_number',
+    'bus',
+  ]);
+
+  final via = field(['via_places', 'via_place', 'via', 'stops']);
 
   final title = from.isNotEmpty && to.isNotEmpty
       ? '$from → $to'
@@ -958,94 +976,85 @@ Widget _buildTripCard(Map<String, dynamic> trip) {
           ? route
           : 'Bus trip';
 
-  final departureDateTime = DateTime.tryParse(departure);
-  final isUpcoming = departureDateTime?.isAfter(DateTime.now()) ?? false;
-
-  const hiddenKeys = {
-    'id',
-    'created',
-    'updated',
-    'collectionid',
-    'collectionname',
-  };
-
-  const displayedKeys = {
-    'from_city',
-    'origin',
-    'source',
-    'from',
-    'to_city',
-    'destination',
-    'to',
-    'route_name',
-    'name',
-    'departure_time',
-    'depart_time',
-    'departure',
-    'bus_name',
-    'bus_number',
-    'bus',
-  };
-
-  final details = <String>[];
-
-  for (final entry in trip.entries) {
-    final key = entry.key;
-    final normalizedKey = key.toLowerCase().replaceAll('_', '');
-    final value = entry.value;
-
-    if (hiddenKeys.contains(normalizedKey) ||
-        normalizedKey.endsWith('id') ||
-        displayedKeys.contains(key.toLowerCase()) ||
-        value == null ||
-        value is Map) {
-      continue;
-    }
-
-    final text = value is List
-        ? value.join(', ').trim()
-        : value.toString().trim();
-
-    if (text.isEmpty ||
-        RegExp(r'^[a-zA-Z0-9]{15}$').hasMatch(text)) {
-      continue;
-    }
-
-    final label = key
-        .replaceAll('_', ' ')
-        .replaceAllMapped(
-          RegExp(r'([a-z])([A-Z])'),
-          (match) => '${match[1]} ${match[2]}',
-        );
-
-    details.add('$label: $text');
-  }
+  final serviceText = [
+    if (service.isNotEmpty) service,
+    if (via.isNotEmpty) 'Via: $via',
+  ].join(' · ');
 
   return Card(
-    color: departureDateTime == null
-        ? null
-        : isUpcoming
-            ? Colors.green.shade50
-            : Colors.red.shade50,
-    child: ListTile(
-      title: Text(title),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    color: const Color(0xFFC2B0AC),
+    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 4),
+      child: Column(
         children: [
-          if (bus.isNotEmpty) Text('Bus: $bus'),
-          if (departure.isNotEmpty) Text('Departure: $departure'),
-          ...details.map(Text.new),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 58,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 24),
+                  child: Text(
+                    departure,
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      if (serviceText.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          serviceText,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: onFavoriteTap,
+                icon: Icon(
+                  isFavorite ? Icons.star : Icons.star_border,
+                  color: Colors.black54,
+                ),
+              ),
+            ],
+          ),
+          if (onMarkTravelled != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onMarkTravelled,
+                icon: const Icon(Icons.directions_bus, color: Colors.teal),
+                label: const Text(
+                  'Mark travelled',
+                  style: TextStyle(color: Colors.teal),
+                ),
+              ),
+            ),
         ],
       ),
-      trailing: departureDateTime == null
-          ? null
-          : Icon(
-              isUpcoming ? Icons.schedule : Icons.history,
-              color: isUpcoming ? Colors.green : Colors.red,
-            ),
     ),
   );
 }
+
 
 
 }
