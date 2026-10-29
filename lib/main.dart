@@ -432,6 +432,36 @@ class _TimetablePageState extends State<TimetablePage> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _removeFavorite(Map<String, dynamic> trip) async {
+  final id = trip['id']?.toString();
+  if (id == null) {
+    throw StateError('Could not find the trip ID.');
+  }
+
+  // Use the method in your cache that removes this ID from saved favorites.
+  await cache.removeFavoriteScheduleId(id);
+}
+
+Future<void> _markTripAsTravelled(Map<String, dynamic> trip) async {
+  final schedule = trip['schedule'];
+  final scheduleId = trip['scheduleId']?.toString() ??
+      (schedule is Map ? schedule['id']?.toString() : null) ??
+      trip['id']?.toString();
+
+  if (scheduleId == null || scheduleId.isEmpty) {
+    throw StateError('Could not find the trip schedule ID.');
+  }
+
+  // Replace `pb` with the name of your PocketBase instance, if it differs.
+  await pb.collection('bus_visits').create(
+    body: {
+      'schedule': scheduleId,
+      'visit_time': DateTime.now().toUtc().toIso8601String(),
+    },
+  );
+}
+
+
   Future<void> _markTravelled(
     Map<String, dynamic> trip,
     String routeLabel,
