@@ -760,16 +760,28 @@ class _TimetablePageState extends State<TimetablePage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => FavoritesPage(
+ builder: (_) => FavoritesPage(
   loadFavoriteIds: cache.getFavoriteScheduleIds,
   loadTrips: () => cache.getRecords('bus_trips'),
-  tripBuilder: (context, trip, {required bool isFavorite}) =>
+
+  onRemoveFavorite: _removeFavorite,
+  onMarkTravelled: _markTripAsTravelled,
+
+  tripBuilder: (
+    context,
+    trip, {
+    required bool isFavorite,
+    required VoidCallback onFavoriteTap,
+    required VoidCallback onMarkTravelled,
+  }) =>
       _buildTripCard(
     trip,
     isFavorite: isFavorite,
-    
+    onFavoriteTap: onFavoriteTap,
+    onMarkTravelled: onMarkTravelled,
   ),
 ),
+
 
       ),
     );
