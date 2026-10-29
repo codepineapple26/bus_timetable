@@ -79,15 +79,15 @@ List<Map<String, dynamic>> sortTrips(
         if (timeB == null) return -1;
         return timeA.compareTo(timeB);
 
-      case TripSort.from:
-        return _text(scheduleA, ['from_place', 'fromPlace'])
+      case TripSort.fromPlace:
+        return _text(scheduleA, ['from_place', 'from'])
             .toLowerCase()
-            .compareTo(_text(scheduleB, ['from_place', 'fromPlace']).toLowerCase());
+            .compareTo(_text(scheduleB, ['from_place', 'from']).toLowerCase());
 
-      case TripSort.to:
-        return _text(scheduleA, ['to_place', 'toPlace'])
+      case TripSort.toPlace:
+        return _text(scheduleA, ['to_place', 'to'])
             .toLowerCase()
-            .compareTo(_text(scheduleB, ['to_place', 'toPlace']).toLowerCase());
+            .compareTo(_text(scheduleB, ['to_place', 'to']).toLowerCase());
     }
   });
 
