@@ -23,13 +23,13 @@ List<Map<String, dynamic>> filterTrips(
     final schedule = _scheduleOf(item);
     final searchableText = [
       item['travel_date'],
-      item['visit_date'],
+      item['visit_time'],
       schedule['from_place'],
       schedule['to_place'],
       schedule['via_places'],
       schedule['route'],
       schedule['service'],
-      schedule['departure'],
+      schedule['departure_time'],
     ].where((value) => value != null).join(' ').toLowerCase();
 
     return searchableText.contains(term);
