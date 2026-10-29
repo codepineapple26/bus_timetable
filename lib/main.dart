@@ -767,8 +767,7 @@ class _TimetablePageState extends State<TimetablePage> {
       _buildTripCard(
     trip,
     isFavorite: isFavorite,
-    onFavoriteTap: () => yourFavoriteToggleFunction(trip),
-    onMarkTravelled: () => yourMarkTravelledFunction(trip),
+    
   ),
 ),
 
