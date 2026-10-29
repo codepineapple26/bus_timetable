@@ -405,6 +405,27 @@ class _TimetablePageState extends State<TimetablePage> {
 
   Set<String> _favoriteIds = {};
 
+  String _routeLabel(Map<String, dynamic> trip) {
+  String firstValue(List<String> keys) {
+    for (final key in keys) {
+      final value = trip[key]?.toString().trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  final route = firstValue(['route', 'route_name', 'routeName']);
+  final from = firstValue(['from', 'origin', 'departure_stop']);
+  final to = firstValue(['to', 'destination', 'arrival_stop']);
+
+  final places = [from, to].where((value) => value.isNotEmpty).join(' → ');
+  if (route.isNotEmpty && places.isNotEmpty) return '$route ($places)';
+  if (route.isNotEmpty) return route;
+  if (places.isNotEmpty) return places;
+  return 'Bus trip';
+}
+
+
 Future<void> _reloadFavoriteIds() async {
   final ids = await cache.getFavoriteScheduleIds();
   if (!mounted) return;
