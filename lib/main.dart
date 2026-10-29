@@ -418,7 +418,7 @@ Future<void> _reloadFavoriteIds() async {
         loadFavoriteIds: cache.getFavoriteScheduleIds,
         loadTrips: () => cache.getRecords('bus_trips'),
         onRemoveFavorite: _removeFavorite,
-        onMarkTravelled: _markTripAsTravelled,
+        onMarkTravelled: (trip) => _markTravelled(trip, _routeLabel(trip)),
         tripBuilder: (
           context,
           trip, {
@@ -600,32 +600,33 @@ Future<void> _markTripAsTravelled(Map<String, dynamic> trip) async {
 
 
 
-  Future<void> _markTravelled(
-    Map<String, dynamic> trip,
-    String routeLabel,
-  ) async {
-    final scheduleId = trip['id']?.toString();
-    if (scheduleId == null || scheduleId.isEmpty) return;
+Future<bool> _markTravelled(
+  Map<String, dynamic> trip,
+  String routeLabel,
+) async {
+  final scheduleId = trip['id']?.toString();
+  if (scheduleId == null || scheduleId.isEmpty) return false;
 
-    final saved = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AddVisitPage(
-          pb: pb,
-          scheduleId: scheduleId,
-          scheduleLabel: routeLabel,
-        ),
+  final saved = await Navigator.push<bool>(
+    context,
+    MaterialPageRoute(
+      builder: (_) => AddVisitPage(
+        pb: pb,
+        scheduleId: scheduleId,
+        scheduleLabel: routeLabel,
       ),
+    ),
+  );
+
+  if (!mounted) return false;
+
+  if (saved == true) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Travel recorded')),
     );
-
-    if (!mounted) return;
-
-    if (saved == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Travel recorded')),
-      );
-    }
   }
+  return saved == true;
+}
 
   List<Map<String, dynamic>> _records(String collection) {
     return records[collection] ?? const [];
