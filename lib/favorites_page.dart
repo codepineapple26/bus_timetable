@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 
+typedef FavoriteTripBuilder = Widget Function(
+  BuildContext context,
+  Map<String, dynamic> trip, {
+  required bool isFavorite,
+});
+
 class FavoritesPage extends StatefulWidget {
   const FavoritesPage({
     super.key,
@@ -10,12 +16,7 @@ class FavoritesPage extends StatefulWidget {
 
   final Future<Set<String>> Function() loadFavoriteIds;
   final Future<List<Map<String, dynamic>>> Function() loadTrips;
-
-  /// Pass the same card builder used on the timetable screen.
-  final Widget Function(
-    BuildContext context,
-    Map<String, dynamic> trip,
-  ) tripBuilder;
+  final FavoriteTripBuilder tripBuilder;
 
   @override
   State<FavoritesPage> createState() => _FavoritesPageState();
@@ -43,28 +44,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final future = _loadFavorites();
     setState(() => _favoritesFuture = future);
     await future;
-  }
-
-  Widget _buildFavoriteTripCard(
-    BuildContext context,
-    Map<String, dynamic> trip,
-  ) {
-    return Stack(
-      children: [
-        widget.tripBuilder(context, trip),
-        const Positioned(
-          top: 8,
-          right: 14,
-          child: IgnorePointer(
-            child: Icon(
-              Icons.star,
-              color: Colors.amber,
-              size: 24,
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   @override
@@ -97,7 +76,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: trips.length,
               itemBuilder: (context, index) {
-                return _buildFavoriteTripCard(context, trips[index]);
+                return widget.tripBuilder(
+                  context,
+                  trips[index],
+                  isFavorite: true,
+                );
               },
             ),
           );
