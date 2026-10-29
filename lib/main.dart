@@ -405,25 +405,27 @@ class _TimetablePageState extends State<TimetablePage> {
 
   Set<String> _favoriteIds = {};
 
-  String _routeLabel(Map<String, dynamic> trip) {
-  String firstValue(List<String> keys) {
-    for (final key in keys) {
-      final value = trip[key]?.toString().trim();
-      if (value != null && value.isNotEmpty) return value;
-    }
-    return '';
-  }
+String _routeLabel(Map<String, dynamic> trip) {
+  String text(String key) => trip[key]?.toString().trim() ?? '';
 
-  final route = firstValue(['route', 'route_name', 'routeName']);
-  final from = firstValue(['from', 'origin', 'departure_stop']);
-  final to = firstValue(['to', 'destination', 'arrival_stop']);
+  final from = text('from_place');
+  final to = text('to_place');
+  final rawVia = trip['via_places'];
 
-  final places = [from, to].where((value) => value.isNotEmpty).join(' → ');
-  if (route.isNotEmpty && places.isNotEmpty) return '$route ($places)';
-  if (route.isNotEmpty) return route;
+  final via = rawVia is List
+      ? rawVia.map((place) => place.toString().trim())
+          .where((place) => place.isNotEmpty)
+          .join(', ')
+      : rawVia?.toString().trim() ?? '';
+
+  final places = [from, to].where((place) => place.isNotEmpty).join(' → ');
+
+  if (places.isNotEmpty && via.isNotEmpty) return '$places via $via';
   if (places.isNotEmpty) return places;
+  if (via.isNotEmpty) return 'Via $via';
   return 'Bus trip';
 }
+
 
 
 Future<void> _reloadFavoriteIds() async {
