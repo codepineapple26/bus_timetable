@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pocketbase/pocketbase.dart';
 import 'utils/trip_search.dart';
+import 'utils/trip_sorting.dart';
 
 import 'travel_visit_details_page.dart'; // Adjust this path if needed.
 
