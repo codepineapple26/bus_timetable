@@ -452,15 +452,16 @@ Future<void> _markTripAsTravelled(Map<String, dynamic> trip) async {
     throw StateError('Could not find the trip schedule ID.');
   }
 
-  final now = DateTime.now().toUtc();
-
-  await cache.saveTravelVisit(
-    localId: 'local-${now.microsecondsSinceEpoch}',
-    scheduleId: scheduleId,
-    visitTime: now.toIso8601String(),
-    purpose: 'Marked as travelled',
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (_) => AddTravelVisitPage(
+        cache: cache,
+        scheduleId: scheduleId,
+      ),
+    ),
   );
 }
+
 
 
 
