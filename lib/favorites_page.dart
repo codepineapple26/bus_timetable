@@ -45,6 +45,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _favoritesFuture = _loadFavorites();
   }
 
+  final TextEditingController _tripSearchController = TextEditingController();
+String _tripSearch = '';
+TripSort _tripSort = TripSort.departureEarliest;
+
+  onChanged: (value) {
+  setState(() {
+    _tripSearch = value;
+  });
+},
+
+
   Future<List<Map<String, dynamic>>> _loadFavorites() async {
     final favoriteIds = await widget.loadFavoriteIds();
     final trips = await widget.loadTrips();
@@ -88,6 +99,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
       SnackBar(content: Text(message)),
     );
   }
+
+  @override
+void dispose() {
+  _tripSearchController.dispose();
+  super.dispose();
+}
+
 
   @override
   Widget build(BuildContext context) {
