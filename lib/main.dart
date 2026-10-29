@@ -953,9 +953,9 @@ class _TimetablePageState extends State<TimetablePage> {
   }
 Widget _buildTripCard(
   Map<String, dynamic> trip, {
-  bool isFavorite = false,
-  VoidCallback? onFavoriteTap,
-  VoidCallback? onMarkTravelled,
+  required bool isFavorite,
+  required VoidCallback onFavoriteTap,
+  required VoidCallback onMarkTravelled,
 }) {
   String field(List<String> keys) {
     for (final key in keys) {
