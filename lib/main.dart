@@ -562,14 +562,19 @@ Future<void> _reloadFavoriteIds() async {
     if (mounted) setState(() {});
   }
 
- Future<void> _removeFavorite(Map<String, dynamic> trip) async {
-  final scheduleId = trip['id']?.toString();
-  if (scheduleId == null || scheduleId.isEmpty) {
+Future<void> _removeFavorite(Map<String, dynamic> trip) async {
+  final id = trip['id']?.toString();
+  if (id == null || id.isEmpty) {
     throw StateError('Could not find the trip ID.');
   }
 
-  await cache.removeFavorite(scheduleId);
+  await cache.removeFavorite(id);
+
+  if (!mounted) return;
+  final updatedIds = Set<String>.from(_favoriteIds)..remove(id);
+  setState(() => _favoriteIds = updatedIds);
 }
+
 
 
 Future<void> _markTripAsTravelled(Map<String, dynamic> trip) async {
