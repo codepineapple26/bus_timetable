@@ -44,6 +44,99 @@ class BusTimetableApp extends StatelessWidget {
   }
 }
 
+class AddTravelVisitPage extends StatefulWidget {
+  const AddTravelVisitPage({
+    super.key,
+    required this.cache,
+    required this.scheduleId,
+  });
+
+  final LocalCache cache;
+  final String scheduleId;
+
+  @override
+  State<AddTravelVisitPage> createState() => _AddTravelVisitPageState();
+}
+
+class _AddTravelVisitPageState extends State<AddTravelVisitPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _purposeController = TextEditingController();
+  final _notesController = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _purposeController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _saving = true);
+
+    try {
+      final now = DateTime.now().toUtc();
+
+      await widget.cache.saveTravelVisit(
+        localId: 'local-${now.microsecondsSinceEpoch}',
+        scheduleId: widget.scheduleId,
+        visitTime: now.toIso8601String(),
+        purpose: _purposeController.text.trim(),
+        notes: _notesController.text.trim().isEmpty
+            ? null
+            : _notesController.text.trim(),
+      );
+
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save travel: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Add travel details')),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            TextFormField(
+              controller: _purposeController,
+              decoration: const InputDecoration(labelText: 'Purpose'),
+              validator: (value) =>
+                  value == null || value.trim().isEmpty
+                      ? 'Enter a purpose'
+                      : null,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _notesController,
+              decoration: const InputDecoration(labelText: 'Notes'),
+              maxLines: 4,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _saving ? null : _save,
+              child: Text(_saving ? 'Saving…' : 'Save travel'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
 
 class LocalCache {
   late final Database db;
