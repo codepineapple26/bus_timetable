@@ -19,6 +19,7 @@ import 'favorites_page.dart';
 import 'add_visit_page.dart';
 import 'view_travel_history_page.dart';
 import 'travel_visit_details_page.dart';
+import 'utils/trip_search.dart';
 
 const pbUrl = 'http://10.163.138.218:8090';
 final pb = PocketBase(pbUrl);
