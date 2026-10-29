@@ -403,6 +403,15 @@ class _TimetablePageState extends State<TimetablePage> {
     _tripSearch = '';
   }
 
+  Set<String> _favoriteIds = {};
+
+Future<void> _reloadFavoriteIds() async {
+  final ids = await cache.getFavoriteScheduleIds();
+  if (!mounted) return;
+  setState(() => _favoriteIds = ids);
+}
+
+
   Future<void> _start() async {
     try {
       await cache.init();
@@ -883,34 +892,34 @@ Future<void> _markTripAsTravelled(Map<String, dynamic> trip) async {
   tooltip: 'Favorites',
   icon: const Icon(Icons.favorite),
   onPressed: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
- builder: (_) => FavoritesPage(
-  loadFavoriteIds: cache.getFavoriteScheduleIds,
-  loadTrips: () => cache.getRecords('bus_trips'),
-
-  onRemoveFavorite: _removeFavorite,
-  onMarkTravelled: _markTripAsTravelled,
-
-  tripBuilder: (
-    context,
-    trip, {
-    required bool isFavorite,
-    required VoidCallback onFavoriteTap,
-    required VoidCallback onMarkTravelled,
-  }) =>
-      _buildTripCard(
-    trip,
-    isFavorite: isFavorite,
-    onFavoriteTap: onFavoriteTap,
-    onMarkTravelled: onMarkTravelled,
-  ),
-),
-
-
+ Future<void> _openFavorites() async {
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (_) => FavoritesPage(
+        loadFavoriteIds: cache.getFavoriteScheduleIds,
+        loadTrips: () => cache.getRecords('bus_trips'),
+        onRemoveFavorite: _removeFavorite,
+        onMarkTravelled: _markTripAsTravelled,
+        tripBuilder: (
+          context,
+          trip, {
+          required bool isFavorite,
+          required VoidCallback onFavoriteTap,
+          required VoidCallback onMarkTravelled,
+        }) =>
+            _buildTripCard(
+          trip,
+          isFavorite: isFavorite,
+          onFavoriteTap: onFavoriteTap,
+          onMarkTravelled: onMarkTravelled,
+        ),
       ),
-    );
+    ),
+  );
+
+  await _reloadFavoriteIds();
+}
+
   },
 
     ),
